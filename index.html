@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC SDK Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        #logs {
+            background: #000;
+            color: #00ff00;
+            padding: 10px;
+            border-radius: 4px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        audio {
+            width: 100%;
+            margin: 10px 0;
+        }
+        .waveform-container {
+            margin-top: 20px;
+        }
+        .waveform-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        #waveformCanvas {
+            width: 100%;
+            height: 150px;
+            background: #000;
+            border-radius: 4px;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebRTC SDK Example</h1>
+    
+    <div class="container">
+        <h2>Configuration</h2>
+        <div>
+            <label>Endpoint URL:</label>
+            <input type="text" id="endpointUrl" placeholder="https://your-api.com/webrtc-config" style="width: 300px;">
+        </div>
+        <div style="margin-top: 10px;">
+            <label>User ID:</label>
+            <input type="text" id="userId" placeholder="user-123" style="width: 300px;">
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Connection</h2>
+        <button type="button" id="connectBtn">Connect</button>
+        <button type="button" id="disconnectBtn" disabled>Disconnect</button>
+        <div id="connectionStatus" class="status info">Not connected</div>
+    </div>
+
+    <div class="container">
+        <h2>Call Controls</h2>
+        <button type="button" id="startCallBtn" disabled>Start Call</button>
+        <button type="button" id="endCallBtn" disabled>End Call</button>
+        <button type="button" id="muteBtn" disabled>Mute</button>
+        <button type="button" id="unmuteBtn" disabled>Unmute</button>
+        <div id="callStatus" class="status info">No active call</div>
+        <div id="audioStatus" class="status info">No audio stream</div>
+    </div>
+
+    <div class="container">
+        <h2>Audio Waveform</h2>
+        <div class="waveform-container">
+            <div class="waveform-title">Remote Audio Stream</div>
+            <canvas id="waveformCanvas"></canvas>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>DTMF & Info</h2>
+        <input type="text" id="dtmfInput" placeholder="Enter DTMF tones (e.g., 123)" style="width: 200px;">
+        <button type="button" id="sendDtmfBtn" disabled>Send DTMF</button>
+        <br><br>
+        <input type="text" id="infoText" placeholder="Info message text" style="width: 200px;">
+        <input type="text" id="infoData" placeholder="Info data (JSON)" style="width: 200px;">
+        <button type="button" id="sendInfoBtn" disabled>Send Info</button>
+    </div>
+
+    <div class="container">
+        <h2>Logs</h2>
+        <div id="logs"></div>
+        <button type="button" id="clearLogsBtn">Clear Logs</button>
+    </div>
+
+    <script type="module">
+        // This would normally be: import { createWebRTCClient } from '@cognigy/webrtc-sdk';
+        // For this example, we'll simulate the SDK
+        import { createWebRTCClient } from './dist/webRTCSDK.es.js';
+        // import * as sounds from './sounds.js';
+        let client = null;
+        let currentSession = null;
+
+        // DOM elements
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const startCallBtn = document.getElementById('startCallBtn');
+        const endCallBtn = document.getElementById('endCallBtn');
+        const muteBtn = document.getElementById('muteBtn');
+        const unmuteBtn = document.getElementById('unmuteBtn');
+        const sendDtmfBtn = document.getElementById('sendDtmfBtn');
+        const sendInfoBtn = document.getElementById('sendInfoBtn');
+		const clearLogsBtn = document.getElementById('clearLogsBtn');
+        
+        const connectionStatus = document.getElementById('connectionStatus');
+        const callStatus = document.getElementById('callStatus');
+        const audioStatus = document.getElementById('audioStatus');
+        const remoteAudio = document.getElementById('remoteAudio');
+        const logs = document.getElementById('logs');
+        const waveformCanvas = document.getElementById('waveformCanvas');
+        
+        // Waveform visualization variables
+        let audioContext = null;
+        let analyser = null;
+        let dataArray = null;
+        let animationFrameId = null;
+
+        const ringingSound = new Audio();
+        // Logging function
+        function log(message, type = 'info', ...rest) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+			if (type === 'error') {
+				logEntry.style.color = 'red';
+			} else if (type === 'info') {
+				logEntry.style.color = 'blue';
+			} else if (type === 'warning') {
+				logEntry.style.color = 'yellow';
+			}
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logs.appendChild(logEntry);
+            logs.scrollTop = logs.scrollHeight;
+            console.log(`[WebRTC SDK]: ${message}`, ...rest);
+        }
+
+        function clearLogs() {
+            logs.innerHTML = '';
+        }
+
+        // Waveform visualization functions
+        function initWaveformVisualization(stream) {
+            // Stop any existing visualization
+            stopWaveformVisualization();
+            
+            // Create audio context if it doesn't exist
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            
+            // Create analyzer node
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 2048;
+            analyser.smoothingTimeConstant = 0.8;
+            
+            // Create source from stream
+            const source = audioContext.createMediaStreamSource(stream);
+            source.connect(analyser);
+            
+            // Create data array
+            const bufferLength = analyser.frequencyBinCount;
+            dataArray = new Uint8Array(bufferLength);
+            
+            // Start visualization
+            drawWaveform();
+        }
+
+        function drawWaveform() {
+            if (!analyser || !waveformCanvas) return;
+            
+            animationFrameId = requestAnimationFrame(drawWaveform);
+            
+            analyser.getByteTimeDomainData(dataArray);
+            
+            const canvas = waveformCanvas;
+            const canvasCtx = canvas.getContext('2d');
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            canvasCtx.fillStyle = '#000000';
+            canvasCtx.fillRect(0, 0, width, height);
+            
+            canvasCtx.lineWidth = 2;
+            canvasCtx.strokeStyle = '#00ff00';
+            canvasCtx.beginPath();
+            
+            const sliceWidth = width / dataArray.length;
+            let x = 0;
+            
+            for (let i = 0; i < dataArray.length; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = (v * height / 2) + (height / 2);
+                
+                if (i === 0) {
+                    canvasCtx.moveTo(x, y);
+                } else {
+                    canvasCtx.lineTo(x, y);
+                }
+                
+                x += sliceWidth;
+            }
+            
+            canvasCtx.stroke();
+        }
+
+        function stopWaveformVisualization() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            
+            // Clear canvas
+            if (waveformCanvas) {
+                const canvasCtx = waveformCanvas.getContext('2d');
+                waveformCanvas.width = waveformCanvas.offsetWidth;
+                waveformCanvas.height = waveformCanvas.offsetHeight;
+                const width = waveformCanvas.width;
+                const height = waveformCanvas.height;
+                canvasCtx.fillStyle = '#000000';
+                canvasCtx.fillRect(0, 0, width, height);
+            }
+        }
+
+        // Update UI based on state
+        
+        ringingSound.onplay = () => {
+            console.log('ringingSound playing');
+        };
+        // Event handlers
+        connectBtn.addEventListener('click', async () => {
+            try {
+                const endpointUrl = document.getElementById('endpointUrl').value;
+                const userId = document.getElementById('userId').value;
+
+                if (!endpointUrl ) {
+                    alert('Please enter endpoint URL and token');
+                    return;
+                }
+
+                log('Creating WebRTC client...');
+                console.log(endpointUrl,userId,'endpointUrl,userId');
+                // This is where you would use the actual SDK:
+                client =  await createWebRTCClient({
+                    endpointUrl,
+                    userId: userId,
+                });
+                const session = client.getCurrentSession();
+
+                console.log(client, session,'client, session');
+
+                // For demo purposes, we'll simulate the client
+                // client = {
+                //     isConnected: () => true,
+                //     connect: async () => { log('Connected to SIP server'); },
+                //     disconnect: async () => { log('Disconnected from SIP server'); },
+                //     startCall: async () => { log('Starting call...'); },
+                //     endCall: async () => { log('Ending call...'); },
+                //     mute: async () => { log('Call muted'); },
+                //     unmute: async () => { log('Call unmuted'); },
+                //     sendDTMF: async (tones) => { log(`DTMF sent: ${tones}`); },
+                //     sendInfo: async (text, data) => { log(`Info sent: ${text}, data: ${JSON.stringify(data)}`); },
+                //     on: (event, callback) => { log(`Event listener added: ${event}`); },
+                //     getCurrentSession: () => currentSession
+                // };
+
+                // Set up event listeners
+                setupEventListeners();
+
+                log('Connecting to SIP server...');
+                await client.connect();
+                
+                connectionStatus.textContent = 'Connected';
+                connectionStatus.className = 'status connected';
+                
+                console.log(client.isConnected(),'client');
+                updateUI();
+                ringingSound.play();
+            } catch (error) {
+                log(`Connection failed: ${error.message}`, 'error');
+                connectionStatus.textContent = `Connection failed: ${error.message}`;
+                connectionStatus.className = 'status error';
+            }
+        });
+
+        disconnectBtn.addEventListener('click', async () => {
+            try {
+                if (client) {
+                    await client.disconnect();
+                    client = null;
+                    currentSession = null;
+                }
+                
+                connectionStatus.textContent = 'Disconnected';
+                connectionStatus.className = 'status info';
+                callStatus.textContent = 'No active call';
+                callStatus.className = 'status info';
+                audioStatus.textContent = 'No audio stream';
+                audioStatus.className = 'status info';
+                
+                remoteAudio.srcObject = null;
+                stopWaveformVisualization();
+                
+                updateUI();
+                
+            } catch (error) {
+                log(`Disconnect failed: ${error.message}`, 'error');
+            }
+        });
+
+        startCallBtn.addEventListener('click', async () => {
+                const endpointUrl = document.getElementById('endpointUrl').value;
+                const userId = document.getElementById('userId').value;
+                try {
+                client =  await createWebRTCClient({
+                    endpointUrl,
+                    userId,
+                });
+                ringingSound.play();
+                setupEventListeners();
+                // await client.connect();
+                // await client.startCall();
+				await client.connectAndCall();
+                
+                // Simulate session creation
+                currentSession = {
+                    id: `session-${Date.now()}`,
+                    status: 'ringing',
+                    muted: false
+                };
+                
+                callStatus.textContent = 'Call ringing...';
+                callStatus.className = 'status info';
+                const session = client.getCurrentSession();
+
+                console.log(session,'client, session');
+                updateUI();
+                
+                // Simulate call answered after 3 seconds
+                setTimeout(() => {
+                    if (currentSession) {
+                        currentSession.status = 'answered';
+                        callStatus.textContent = 'Call answered';
+                        callStatus.className = 'status connected';
+                        log('Call answered');
+                        updateUI();
+                    }
+                }, 3000);
+                
+            } catch (error) {
+                log(`Start call failed: ${error.message}`, 'error');
+            }
+        });
+
+        endCallBtn.addEventListener('click', async () => {
+            try {
+                await client.endCall();
+                currentSession = null;
+                
+                callStatus.textContent = 'Call ended';
+                callStatus.className = 'status info';
+                audioStatus.textContent = 'No audio stream';
+                audioStatus.className = 'status info';
+                
+                remoteAudio.srcObject = null;
+                stopWaveformVisualization();
+                ringingSound.pause();
+                
+                updateUI();
+                
+            } catch (error) {
+                log(`End call failed: ${error.message}`, 'error');
+            }
+        });
+
+        muteBtn.addEventListener('click', async () => {
+            try {
+                await client.mute();
+                if (currentSession) {
+                    currentSession.muted = true;
+                }
+                updateUI();
+            } catch (error) {
+                log(`Mute failed: ${error.message}`, 'error');
+            }
+        });
+
+        unmuteBtn.addEventListener('click', async () => {
+            try {
+                await client.unmute();
+                if (currentSession) {
+                    currentSession.muted = false;
+                }
+                updateUI();
+            } catch (error) {
+                log(`Unmute failed: ${error.message}`, 'error');
+            }
+        });
+
+        sendDtmfBtn.addEventListener('click', async () => {
+            try {
+                const tones = document.getElementById('dtmfInput').value;
+                if (tones) {
+                    await client.sendDTMF(tones);
+                    document.getElementById('dtmfInput').value = '';
+                }
+            } catch (error) {
+                log(`Send DTMF failed: ${error.message}`, 'error');
+            }
+        });
+
+        sendInfoBtn.addEventListener('click', async () => {
+            try {
+                const text = document.getElementById('infoText').value;
+                const dataStr = document.getElementById('infoData').value;
+                let data = {};
+                
+                if (dataStr) {
+                    data = JSON.stringify(dataStr);
+                }
+                
+                if (text) {
+                    await client.sendInfo(text, data);
+                    document.getElementById('infoText').value = '';
+                    document.getElementById('infoData').value = '';
+                }
+            } catch (error) {
+                log(`Send info failed: ${error.message}`, 'error');
+            }
+        });
+
+        function setupEventListeners() {
+            // In a real implementation, these would be actual SDK events:
+            
+            client.on('connecting', () => {
+                log('SIP connecting...');
+            });
+            
+            client.on('connected', () => {
+                log('SIP connected');
+            });
+            
+            client.on('registered', () => {
+                log('SIP registered');
+            });
+            
+            client.on('ringing', (session) => {
+                log(`Call ringing: ${session.id}`);
+                currentSession = session;
+                
+                updateUI();
+            });
+            
+            client.on('answered', (session) => {
+                log(`Call answered: ${session.id}`, 'info', session);
+                currentSession = session;
+                // session.rtcSession.on('newInfo', (info) => {
+                //     log('newInfo...', 'info', info);
+                // });
+
+                client.on('newInfo', (info) => {
+                    log(`Info: ${info.message}`, 'info', info);
+                 });
+                ringingSound.pause();
+                updateUI();
+            });
+            
+            client.on('ended', (session, endInfo) => {
+                log(`Call ended: ${session.id}, reason: ${endInfo.cause}`);
+                currentSession = null;
+                updateUI();
+            });
+            
+            client.on('captureAudio', (stream) => {
+                log('Remote audio stream received','info',stream);
+                // remoteAudio.srcObject = stream;
+                audioStatus.textContent = 'Audio stream active';
+                audioStatus.className = 'status connected';
+                
+                // Initialize waveform visualization
+                try {
+                    initWaveformVisualization(stream);
+                    log('Waveform visualization started');
+                } catch (error) {
+                    log(`Failed to start waveform visualization: ${error.message}`, 'error');
+                }
+            });
+            
+            client.on('audioEnded', () => {
+                log('Audio stream ended');
+                remoteAudio.srcObject = null;
+                audioStatus.textContent = 'No audio stream';
+                audioStatus.className = 'status info';
+                stopWaveformVisualization();
+            });
+            
+            client.on('error', (error) => {
+                log(`SDK Error: ${error.message}`, 'error');
+            });
+
+            client.on('infoReceived',({originator, info}) => {
+                if(originator === 'remote') {
+                  const parsedData = JSON.parse(info.body);
+                  console.log('Received data:', parsedData);
+                }
+            });
+            client.on('transcription',(messages) => {
+                console.log('Transcription:', info);
+                log(`Transcription: ${JSON.stringify(messages)}`, 'info', messages);
+            });
+            client.on('muted', (session) => {
+                log(`Call muted: ${session.id}`, 'info', session);
+                currentSession = session;
+                updateUI();
+            });
+            client.on('unmuted', (session) => {
+                log(`Call unmuted: ${session.id}`, 'info', session);
+                currentSession = session;
+                updateUI();
+            });
+        }
+
+		clearLogsBtn.addEventListener('click', () => {
+			clearLogs();
+		});
+
+        function updateUI() {
+            const isConnected = client?.isConnected();
+            const hasActiveCall = (currentSession?.status === 'ringing' || currentSession?.status === 'answered');
+            
+            connectBtn.disabled = isConnected;
+            disconnectBtn.disabled = !isConnected;
+            startCallBtn.disabled = false // !isConnected || hasActiveCall;
+            endCallBtn.disabled = !hasActiveCall;
+            muteBtn.disabled = !hasActiveCall || (currentSession?.muted);
+            unmuteBtn.disabled = !hasActiveCall || (!currentSession?.muted);
+            sendDtmfBtn.disabled = !hasActiveCall;
+            sendInfoBtn.disabled = !hasActiveCall;
+        }
+        // Initialize UI
+        updateUI();
+        log('WebRTC SDK Example loaded');
+        log('Note: This is a demo interface. Replace the simulated client with the actual SDK.');
+    </script>
+</body>
+</html>
+

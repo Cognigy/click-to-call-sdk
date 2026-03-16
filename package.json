@@ -1,0 +1,69 @@
+{
+  "name": "@cognigy/click-to-call-sdk",
+  "version": "0.0.5",
+  "description": "A standalone WebRTC SDK for SIP-based voice calling with custom audio support",
+  "main": "dist/webRTCSDK.cjs.js",
+  "module": "dist/webRTCSDK.es.js",
+  "browser": "dist/webRTCSDK.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/webRTCSDK.es.js",
+      "require": "./dist/webRTCSDK.cjs.js",
+      "default": "./dist/webRTCSDK.es.js"
+    }
+  },
+  "scripts": {
+    "build": "rm -rf dist && vite build",
+    "dev": "NODE_ENV=development vite build --mode development --watch & NODE_ENV=development vite --mode development",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:ui": "vitest --ui",
+    "clean": "rm -rf dist coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome lint --write"
+  },
+  "keywords": [
+    "webrtc",
+    "sip",
+    "voip",
+    "calling",
+    "audio",
+    "sdk",
+    "click-to-call"
+  ],
+  "author": "Cognigy",
+  "license": "MIT",
+  "dependencies": {
+    "events": "^3.3.0",
+    "jssip": "^3.13.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
+    "@types/node": "^25.3.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "@vitest/ui": "^4.0.18",
+    "jsdom": "^28.1.0",
+    "terser": "^5.46.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vite-bundle-analyzer": "^1.3.6",
+    "vite-plugin-compression": "^0.5.1",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^4.0.18"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Cognigy/click-to-call-sdk.git"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
