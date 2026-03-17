@@ -1,4 +1,4 @@
-# Click to Call SDK - Architecture
+# Click To Call SDK - Architecture
 
 ## Overview
 
@@ -8,35 +8,35 @@ The Click to Call SDK is a standalone, framework-agnostic TypeScript library tha
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    Consumer App                      │
-│              (React, Vue, Vanilla JS)                │
+│                    Consumer App                     │
+│              (React, Vue, Vanilla JS)               │
 └──────────────────────┬──────────────────────────────┘
                        │
                        ▼
 ┌─────────────────────────────────────────────────────┐
-│               createWebRTCClient()                   │
-│                  (src/index.ts)                       │
-│         Factory function & SDK entry point            │
+│               createWebRTCClient()                  │
+│                  (src/index.ts)                     │
+│         Factory function & SDK entry point          │
 └──────────────────────┬──────────────────────────────┘
                        │
                        ▼
 ┌─────────────────────────────────────────────────────┐
-│                  WebRTCClient                         │
-│              (src/WebRTCClient.ts)                    │
-│                                                      │
-│  Public API surface — orchestrates all managers       │
-│  and exposes a unified event system to consumers      │
-│                                                      │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐ │
-│  │ Config   │ │ SIP      │ │ Session  │ │ Audio  │ │
-│  │ Manager  │ │ Manager  │ │ Manager  │ │ Manager│ │
-│  └──────────┘ └──────────┘ └──────────┘ └────────┘ │
+│                  WebRTCClient                       │
+│              (src/WebRTCClient.ts)                  │
+│                                                     │
+│  Public API surface — orchestrates all managers     │
+│  and exposes a unified event system to consumers    │
+│                                                     │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐  │
+│  │ Config   │ │ SIP      │ │ Session  │ │ Audio  │  │
+│  │ Manager  │ │ Manager  │ │ Manager  │ │ Manager│  │
+│  └──────────┘ └──────────┘ └──────────┘ └────────┘  │
 └─────────────────────────────────────────────────────┘
 ```
 
 ## Module Breakdown
 
-### 1. Entry Point (`src/index.ts`)
+### Entry Point (`src/index.ts`)
 
 The public surface of the SDK. Exports:
 
@@ -45,7 +45,7 @@ The public surface of the SDK. Exports:
 - `isWebRTCSupported()` / `checkWebRTCSupport()` — environment capability checks.
 - All public TypeScript types and interfaces.
 
-### 2. WebRTCClient (`src/WebRTCClient.ts`)
+### WebRTCClient (`src/WebRTCClient.ts`)
 
 The **orchestrator**. It owns the four managers and wires their internal events to a single public event bus.
 
@@ -71,7 +71,7 @@ The **orchestrator**. It owns the four managers and wires their internal events 
 3. JsSIP creates an RTCSession → `SessionManager.createSession()` handles it.
 4. Session events (ringing, answered, ended, etc.) bubble up through `WebRTCClient`.
 
-### 3. ConfigManager (`src/ConfigManager.ts`)
+### ConfigManager (`src/ConfigManager.ts`)
 
 Fetches and caches the endpoint configuration from the server.
 
@@ -83,7 +83,7 @@ Fetches and caches the endpoint configuration from the server.
 - Builds the `fullUsername` for SIP registration: `{userId}@{realm}`.
 - Provides accessors for SIP credentials, application SID, widget active state, and privacy settings.
 
-### 4. SipManager (`src/SipManager.ts`)
+### SipManager (`src/SipManager.ts`)
 
 Wraps [JsSIP](https://jssip.net/) to manage the SIP User Agent lifecycle.
 
@@ -102,7 +102,7 @@ Browser ←→ WebSocket ←→ SIP Proxy ←→ VoiceGateway
          (wss://)       (realm)
 ```
 
-### 5. SessionManager (`src/SessionManager.ts`)
+### SessionManager (`src/SessionManager.ts`)
 
 Manages the lifecycle of individual call sessions (RTCSessions from JsSIP).
 
@@ -123,7 +123,7 @@ init → ringing → answered → ended
                           → failed
 ```
 
-### 6. AudioManager (`src/AudioManager.ts`)
+### AudioManager (`src/AudioManager.ts`)
 
 Handles remote audio stream playback.
 
@@ -135,22 +135,22 @@ Handles remote audio stream playback.
 - Emits `captureAudio` events when capture mode is enabled (for custom audio processing).
 - Cleans up audio resources on stop/destroy.
 
-### 7. Event System (`src/utils/events.ts`)
+### Event System (`src/utils/events.ts`)
 
 A custom `SDKEventEmitter` extending Node.js `EventEmitter` (polyfilled for browser via the `events` package).
 
 **Event constants (`COGNIGY_WEBRTC_EVENTS`):**
 
-| Category | Events |
-|----------|--------|
-| Connection | `connecting`, `connected`, `disconnected`, `registered`, `unregistered` |
-| Call | `ringing`, `answered`, `ended`, `failed` |
-| Audio | `muted`, `unmuted`, `audioEnded`, `captureAudio` |
-| Communication | `infoSent`, `infoReceived`, `transcription` |
-| Internal | `sessionCreated`, `sessionUpdated`, `sessionDestroyed` |
-| Error | `error` |
+| Category      | Events                                                                  |
+|---------------|-------------------------------------------------------------------------|
+| Connection    | `connecting`, `connected`, `disconnected`, `registered`, `unregistered` |
+| Call          | `ringing`, `answered`, `ended`, `failed`                                |
+| Audio         | `muted`, `unmuted`, `audioEnded`, `captureAudio`                        |
+| Communication | `infoSent`, `infoReceived`, `transcription`                             |
+| Internal      | `sessionCreated`, `sessionUpdated`, `sessionDestroyed`                  |
+| Error         | `error`                                                                 |
 
-### 8. Types
+### Types
 
 **Public types** (`src/types/index.ts`):
 
@@ -238,7 +238,7 @@ Audio plays through browser
 
 ## Directory Structure
 
-```
+```txt
 webrtc-sdk/
 ├── src/
 │   ├── index.ts              # Entry point, factory, exports
