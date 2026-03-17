@@ -47,6 +47,7 @@ export interface WebRTCClientConfig {
 	endpointUrl: string;
 	userId?: string;
 	pcConfig?: RTCConfiguration;
+	captureAudio?: boolean;
 }
 
 // Event types
@@ -85,9 +86,10 @@ export interface WebRTCClientEvents {
 	'unmuted': (session: CallSession) => void;
 	'audioEnded': () => void;
 	'infoSent': (text: string, data: Record<string, any>) => void;
-	'infoReceived': (info: { text: string; data: Record<string, any> }) => void;
+	'infoReceived': (data: { originator: string; info: any }) => void;
 	'error': (error: Error) => void;
 	'captureAudio': (stream: MediaStream) => void;
+	'transcription': (data: any) => void;
 }
 
 export type EventName = keyof WebRTCClientEvents;

@@ -55,9 +55,10 @@ window.addEventListener('beforeunload', () => {
 
 ```typescript
 interface WebRTCClientConfig {
-  endpointUrl: string;         // URL to fetch SIP configuration
-  userId?: string;             // Optional user identifier
-  pcConfig?: RTCConfiguration; // Custom STUN/TURN servers
+  endpointUrl: string;        // URL to fetch SIP configuration
+  userId?: string;            // Optional user identifier
+  pcConfig?: RTCConfiguration; // WebRTC peer connection config
+  captureAudio?: boolean;     // Enable captureAudio event to receive raw MediaStream
 }
 ```
 
@@ -93,7 +94,7 @@ interface WebRTCClientConfig {
 | `failed`        | `(session: CallSession, endInfo: CallEndInfo)`                          |
 | `muted`         | `(session: CallSession)`                                                |
 | `unmuted`       | `(session: CallSession)`                                                |
-| `captureAudio`  | `(stream: MediaStream)`                                                 |
+| `captureAudio`  | Remote audio stream available (requires opt-in) `(stream: MediaStream)` |
 | `audioEnded`    | `()`                                                                    |
 | `infoSent`      | `(text: string, data: Record<string, any>)`                             |
 | `infoReceived`  | `(data: { originator: string; info: { body: string } })`                |

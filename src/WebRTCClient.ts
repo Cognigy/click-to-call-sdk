@@ -41,6 +41,10 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		// Set audio manager on session manager for direct audio handling
 		this.sessionManager.setAudioManager(this.audioManager);
 
+		if (config.captureAudio) {
+			this.audioManager.setCaptureAudio(true);
+		}
+
 		this.setupEventHandlers();
 	}
 
