@@ -89,6 +89,7 @@ export interface WebRTCClientEvents {
 	'infoReceived': (data: { originator: string; info: any }) => void;
 	'error': (error: Error) => void;
 	'captureAudio': (stream: MediaStream) => void;
+	'transcription': (data: any) => void;
 }
 
 export type EventName = keyof WebRTCClientEvents;
