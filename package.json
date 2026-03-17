@@ -24,7 +24,8 @@
     "test:ui": "vitest --ui",
     "clean": "rm -rf dist coverage",
     "typecheck": "tsc --noEmit",
-    "lint": "biome lint --write"
+    "lint": "biome lint --write",
+    "prepare": "husky"
   },
   "keywords": [
     "webrtc",
@@ -43,9 +44,12 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
+    "@commitlint/cli": "^20.5.0",
+    "@commitlint/config-conventional": "^20.5.0",
     "@types/node": "^25.3.0",
     "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
+    "husky": "^9.1.7",
     "jsdom": "^28.1.0",
     "terser": "^5.46.0",
     "typescript": "^5.9.3",
