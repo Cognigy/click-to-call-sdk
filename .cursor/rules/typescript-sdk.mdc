@@ -1,0 +1,41 @@
+---
+description: TypeScript SDK coding conventions for click-to-call-sdk
+alwaysApply: true
+---
+
+# Click To Call SDK Conventions
+
+## Formatting
+
+- Use **Biome** (not Prettier/ESLint) — configured in `biome.json`
+- Indent with tabs, double quotes for strings
+- Run `npx @biomejs/biome lint .` to check, `npm run lint` to auto-fix
+
+## Type Organization
+
+- Public types: `src/types/index.ts` — re-exported via `src/index.ts`
+- Internal types: `src/types/internal.ts` — never exported publicly
+- Prefix interfaces with descriptive names, not `I` prefix
+
+## Event System
+
+- All event names live in `COGNIGY_WEBRTC_EVENTS` in `src/utils/events.ts`
+- New events must be added there AND have a callback type in `src/types/index.ts`
+- Managers extend `SDKEventEmitter` from `src/utils/events.ts`
+
+## Module Pattern
+
+- Each manager is a single class in its own file under `src/`
+- `WebRTCClient` is the orchestrator — it wires managers together
+- New public methods go on `WebRTCClient`, not on individual managers
+
+## Commits
+
+- Use conventional commits: `feat(scope):`, `fix(scope):`, `chore:`, etc.
+- Commitlint enforces this via husky `commit-msg` hook
+
+## Build Outputs
+
+- UMD: `dist/webRTCSDK.js`, CJS: `dist/webRTCSDK.cjs.js`, ES: `dist/webRTCSDK.es.js`
+- Types: `dist/index.d.ts` via `vite-plugin-dts`
+- All public exports go through `src/index.ts`

@@ -1,0 +1,33 @@
+---
+description: Testing conventions for click-to-call-sdk test files
+globs: src/__tests__/**/*.ts
+alwaysApply: false
+---
+
+# Testing Conventions
+
+## Framework
+
+- Vitest with `jsdom` environment (configured in `vitest.config.ts`)
+- Globals enabled: `describe`, `it`, `expect`, `vi` available without imports
+- Path alias: `@` resolves to `src/`
+
+## Test Organization
+
+- Unit tests: `src/__tests__/unit/<ModuleName>.test.ts` — mirrors source file names
+- Integration tests: `src/__tests__/integration/`
+- Mocks: `src/__tests__/mocks/jssip.ts` (JsSIP UA mock), `src/__tests__/mocks/fixtures.ts`
+- Setup: `src/__tests__/setup.ts`
+
+## Running Tests
+
+- `npm run test:run` for single CI run
+- `npm run test` for watch mode during development
+- `npm run test:coverage` to check 80% threshold compliance
+
+## Writing Tests
+
+- Mock JsSIP using the existing mock in `src/__tests__/mocks/jssip.ts`
+- Use fixtures from `src/__tests__/mocks/fixtures.ts` for test data
+- Test both success paths and error/edge cases
+- Avoid real network calls — mock `fetch` and WebSocket
