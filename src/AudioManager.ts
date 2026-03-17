@@ -171,7 +171,18 @@ export class AudioManager extends SDKEventEmitter {
 	}
 
 	/**
-	 * Enable or disable capture audio event emission
+	 * Enable or disable capture-audio event emission.
+	 *
+	 * When enabled, the SDK will emit audio-related events that allow consumers
+	 * to implement their own custom playback logic (for example, by attaching
+	 * the current {@link MediaStream} to a custom <audio> element).
+	 *
+	 * Note: This flag only controls event emission and does NOT disable or
+	 * suppress the SDK's default audio playback behavior. If you enable
+	 * capture audio and also perform your own playback, you may end up with
+	 * "double audio" (both the default audio element and your custom playback).
+	 * To avoid this, explicitly mute or otherwise disable the default audio
+	 * element in your integration when using custom playback.
 	 */
 	setCaptureAudio(enabled: boolean): void {
 		this.state.captureAudio = enabled;
