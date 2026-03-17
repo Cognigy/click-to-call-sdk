@@ -29,7 +29,7 @@ if (!support.supported) throw new Error('Missing: ' + support.missing);
 
 // 2. Create client
 const client = await createWebRTCClient({
-  endpointUrl: 'https://your-cognigy-environment.com/endpoint-config',
+  endpointUrl: 'https://your-cognigy-environment.com/token',
   userId: 'user-123',
 });
 
