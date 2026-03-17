@@ -73,7 +73,6 @@ export class AudioManager extends SDKEventEmitter {
 			console.warn('AudioManager: Default audio element not initialized');
 			return;
 		}
-		// Check if stream has audio tracks before trying to play
 		const audioTracks = stream.getAudioTracks();
 		if (audioTracks.length === 0) {
 			console.warn('AudioManager: Stream has no audio tracks, skipping audio setup');
@@ -171,7 +170,12 @@ export class AudioManager extends SDKEventEmitter {
 		return this.state.currentStream;
 	}
 
-
+	/**
+	 * Enable or disable capture audio event emission
+	 */
+	setCaptureAudio(enabled: boolean): void {
+		this.state.captureAudio = enabled;
+	}
 
 
 	/**

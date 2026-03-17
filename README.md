@@ -59,6 +59,7 @@ interface WebRTCClientConfig {
   endpointUrl: string;        // URL to fetch SIP configuration
   userId?: string;            // Optional user identifier
   pcConfig?: RTCConfiguration; // WebRTC peer connection config
+  captureAudio?: boolean;     // Enable captureAudio event to receive raw MediaStream
 }
 ```
 
@@ -162,26 +163,35 @@ Remove an event listener.
 | `disconnected` | SIP disconnected | `()` |
 | `registered` | SIP registered | `()` |
 | `unregistered` | SIP unregistered | `()` |
+| `ringing` | Call is ringing | `(session: CallSession)` |
 | `answered` | Call was answered | `(session: CallSession)` |
 | `ended` | Call ended normally | `(session: CallSession, endInfo: CallEndInfo)` |
 | `failed` | Call failed | `(session: CallSession, endInfo: CallEndInfo)` |
 | `muted` | Call was muted | `(session: CallSession)` |
 | `unmuted` | Call was unmuted | `(session: CallSession)` |
-| `audioRequired` | Remote audio stream available | `(stream: MediaStream)` |
+| `captureAudio` | Remote audio stream available (requires opt-in) | `(stream: MediaStream)` |
 | `audioEnded` | Audio stream ended | `()` |
 | `infoSent` | Info message sent | `(text: string, data: Record<string, any>)` |
-| `infoReceived` | Info message received | `(info: { text: string; data: Record<string, any> })` |
-| `transcription` | Transcription data received | `(transcription: IChatMessage)` |
+| `infoReceived` | Info message received | `(data: { originator: string; info: any })` |
+| `transcription` | Transcription data received | `(transcription: { originator: string; messages: { text: string }[] })` |
 | `error` | Error occurred | `(error: Error)` |
 
 ## Custom Audio Handling
 
-The SDK supports custom audio handling for advanced use cases:
+The SDK supports custom audio handling for advanced use cases. Enable `captureAudio` via config to receive the raw `MediaStream`:
 
 ```typescript
 const client = await createWebRTCClient({
   endpointUrl: 'https://your-api.com/webrtc-config',
-  userId: 'mockId'
+  userId: 'mockId',
+  captureAudio: true
+});
+
+// Handle remote audio stream
+client.on('captureAudio', (stream) => {
+  const audioElement = document.getElementById('remote-audio') as HTMLAudioElement;
+  audioElement.srcObject = stream;
+  audioElement.play();
 });
 
 // Handle audio end
@@ -259,6 +269,7 @@ async function initializeWebRTC() {
   const client = await createWebRTCClient({
     endpointUrl: 'https://your-api.com/webrtc-config',
     userId: 'user-123',
+    captureAudio: true,
   });
 
   // Set up event listeners
@@ -284,8 +295,7 @@ async function initializeWebRTC() {
     updateUI('ended');
   });
 
-  client.on('audioRequired', (stream) => {
-    // Handle custom audio
+  client.on('captureAudio', (stream) => {
     const audioElement = document.getElementById('remote-audio') as HTMLAudioElement;
     audioElement.srcObject = stream;
     audioElement.play();

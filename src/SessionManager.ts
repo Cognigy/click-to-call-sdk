@@ -168,19 +168,12 @@ export class SessionManager extends SDKEventEmitter {
 		const { rtcSession } = sessionState;
 
 		const attachPCListeners = (pc: RTCPeerConnection) => {
-			pc.addEventListener('addstream', (event: any) => {
-				const stream = event.stream;
-				if (this.audioManager) {
-					this.audioManager.handleRemoteStream(stream);
-				}
-			});
-
 			pc.addEventListener('track', (event: any) => {
 				const track = event.track;
 				const stream = new MediaStream();
 				stream.addTrack(track);
 
-				if (rtcSession.direction === 'outgoing' && this.audioManager) {
+				if (this.audioManager) {
 					this.audioManager.handleRemoteStream(stream);
 				}
 			});

@@ -297,6 +297,7 @@
                 client =  await createWebRTCClient({
                     endpointUrl,
                     userId: userId,
+                    captureAudio: true,
                 });
                 const session = client.getCurrentSession();
 
@@ -368,6 +369,7 @@
                 client =  await createWebRTCClient({
                     endpointUrl,
                     userId,
+                    captureAudio: true,
                 });
                 ringingSound.play();
                 setupEventListeners();
@@ -511,9 +513,6 @@
                 //     log('newInfo...', 'info', info);
                 // });
 
-                client.on('newInfo', (info) => {
-                    log(`Info: ${info.message}`, 'info', info);
-                 });
                 ringingSound.pause();
                 updateUI();
             });
