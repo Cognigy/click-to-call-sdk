@@ -42,7 +42,11 @@ client.on('error', (error) => console.error('Error:', error.message));
 await client.connectAndCall();
 
 // 5. Cleanup on page unload
-window.addEventListener('beforeunload', () => client.destroy());
+window.addEventListener('beforeunload', () => {
+  void client.destroy().catch(() => {
+    // Ignore errors during page unload
+  });
+});
 ```
 
 > **Note:** The call must be initiated from a user gesture (e.g. button click) for browser autoplay policies to allow audio.
