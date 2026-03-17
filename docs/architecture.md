@@ -23,7 +23,7 @@ The Click to Call SDK is a standalone, framework-agnostic TypeScript library tha
 ┌─────────────────────────────────────────────────────┐
 │                  WebRTCClient                       │
 │              (src/WebRTCClient.ts)                  │
-│                                                     │ 
+│                                                     │
 │  Public API surface — orchestrates all managers     │
 │  and exposes a unified event system to consumers    │
 │                                                     │
