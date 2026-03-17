@@ -4,6 +4,9 @@ node_modules/
 
 coverage/
 
+index.html
 tsconfig.json
 vite*.ts
 *.js.map
+.npmrc
+.semantic-release-version

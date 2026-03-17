@@ -1,0 +1,36 @@
+---
+description: Rules for editing GitHub Actions workflow files
+globs: .github/**/*.yml
+alwaysApply: false
+---
+
+# GitHub Actions Conventions
+
+## Node & npm
+
+- Use Node 20 with `actions/setup-node@v4`
+- Always use `npm ci` (not `npm install`) for reproducible installs
+- Cache npm with `cache: "npm"` in setup-node
+
+## Actions Versions
+
+- `actions/checkout@v4`
+- `actions/setup-node@v4`
+- `actions/upload-artifact@v4`
+- `softprops/action-gh-release@v2`
+
+## CI Lint
+
+- Use `npx @biomejs/biome lint .` — never `--write` in CI (must fail on errors, not auto-fix)
+
+## npm Publishing
+
+- Use `registry-url: https://registry.npmjs.org` in setup-node for publish jobs
+- Set `NODE_AUTH_TOKEN: ${{ secrets.COGNIGY_NPM_TOKEN }}` only on the `npm publish` step
+- Always use `--access public` for `@cognigy` scoped packages
+
+## Concurrency
+
+- Use `concurrency` groups to prevent duplicate runs
+- Release/publish workflows: `cancel-in-progress: false`
+- CI workflows: `cancel-in-progress: true`
