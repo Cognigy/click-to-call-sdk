@@ -210,6 +210,75 @@ describe('SipManager', () => {
 		});
 	});
 
+	describe('identity headers', () => {
+		afterEach(() => {
+			sipManager.destroy();
+		});
+
+		const startAndRegister = async () => {
+			sipManager.start();
+			await new Promise(resolve => setTimeout(resolve, 20));
+		};
+
+		it('calls without identity headers when no organisationId/projectId is declared (legacy endpoint)', async () => {
+			sipManager = new SipManager();
+			sipManager.initialize(mockClientConfig, mockSettings);
+			mockUA = sipManager.getUserAgent() as unknown as MockUA;
+			await startAndRegister();
+
+			sipManager.call('app-123');
+
+			expect(mockUA.call).toHaveBeenCalledWith('app-123', expect.objectContaining({
+				extraHeaders: ['X-Source: webrtc'],
+			}));
+		});
+
+		it('declares X-Organisation-Id/X-Project-Id/X-Endpoint-Id when all three are known', async () => {
+			sipManager = new SipManager();
+			sipManager.initialize(
+				{ ...mockClientConfig, organisationId: 'org-1', projectId: 'proj-1', endpointId: 'endpoint-1' },
+				mockSettings
+			);
+			mockUA = sipManager.getUserAgent() as unknown as MockUA;
+			await startAndRegister();
+
+			sipManager.call('endpoint-1');
+
+			expect(mockUA.call).toHaveBeenCalledWith('endpoint-1', expect.objectContaining({
+				extraHeaders: ['X-Source: webrtc', 'X-Organisation-Id: org-1', 'X-Project-Id: proj-1', 'X-Endpoint-Id: endpoint-1'],
+			}));
+		});
+
+		it('omits X-Endpoint-Id when only organisationId/projectId are known', async () => {
+			sipManager = new SipManager();
+			sipManager.initialize(
+				{ ...mockClientConfig, organisationId: 'org-1', projectId: 'proj-1' },
+				mockSettings
+			);
+			mockUA = sipManager.getUserAgent() as unknown as MockUA;
+			await startAndRegister();
+
+			sipManager.call('app-123');
+
+			expect(mockUA.call).toHaveBeenCalledWith('app-123', expect.objectContaining({
+				extraHeaders: ['X-Source: webrtc', 'X-Organisation-Id: org-1', 'X-Project-Id: proj-1'],
+			}));
+		});
+
+		it('sends no identity headers when only one of organisationId/projectId is known', async () => {
+			sipManager = new SipManager();
+			sipManager.initialize({ ...mockClientConfig, organisationId: 'org-1' }, mockSettings);
+			mockUA = sipManager.getUserAgent() as unknown as MockUA;
+			await startAndRegister();
+
+			sipManager.call('app-123');
+
+			expect(mockUA.call).toHaveBeenCalledWith('app-123', expect.objectContaining({
+				extraHeaders: ['X-Source: webrtc'],
+			}));
+		});
+	});
+
 	describe('newRTCSession handling', () => {
 		beforeEach(() => {
 			sipManager.initialize(mockClientConfig, mockSettings);

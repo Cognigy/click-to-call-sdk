@@ -18,6 +18,7 @@ import { randomId } from './utils/helpers.js';
 export class SipManager extends SDKEventEmitter {
 	private ua: IUA | null = null;
 	private pcConfig?: RTCConfiguration;
+	private identityHeaders: string[] = [];
 	private state: SipManagerState = {
 		ua: null,
 		connected: false,
@@ -34,6 +35,14 @@ export class SipManager extends SDKEventEmitter {
 		}
 
 		this.pcConfig = settings.pcConfig;
+		this.identityHeaders =
+			client.organisationId && client.projectId
+				? [
+						`X-Organisation-Id: ${client.organisationId}`,
+						`X-Project-Id: ${client.projectId}`,
+						...(client.endpointId ? [`X-Endpoint-Id: ${client.endpointId}`] : []),
+					]
+				: [];
 
 		console.log('Creating SIP client with config:', { client, settings }, settings.pcConfig);
 
@@ -192,7 +201,7 @@ export class SipManager extends SDKEventEmitter {
 				},
 				mediaConstraints: { audio: true, video: false },
 				pcConfig: this.pcConfig,
-				extraHeaders: ['X-Source: webrtc'],
+				extraHeaders: ['X-Source: webrtc', ...this.identityHeaders],
 			});
 		} catch (error) {
 			console.error('Failed to make call:', error);
