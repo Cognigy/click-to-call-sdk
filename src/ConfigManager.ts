@@ -84,6 +84,9 @@ export class ConfigManager {
 			wsUri: sipInfo.wsUri,
 			applicationSid: sipInfo.applicationSid,
 			realm: sipInfo.realm,
+			organisationId: this.config.organisationId,
+			projectId: this.config.projectId,
+			endpointId: this.config.endpointSettings.endpointId,
 		};
 	}
 
@@ -96,6 +99,25 @@ export class ConfigManager {
 		}
 
 		return this.config.endpointSettings.sipConnectivityInfo.applicationSid;
+	}
+
+	/**
+	 * Get the number to dial. The dialed user part is no longer parsed for
+	 * routing once identity is declared via headers — a bare endpointId is
+	 * enough there; old-style configs (no endpointId) keep dialing
+	 * app-<applicationSid> as before.
+	 */
+	getCallTarget(): string {
+		if (!this.config) {
+			throw new Error('Configuration not loaded');
+		}
+
+		const { organisationId, projectId, endpointSettings } = this.config;
+		const { endpointId } = endpointSettings;
+
+		return organisationId && projectId && endpointId
+			? endpointId
+			: `app-${endpointSettings.sipConnectivityInfo.applicationSid}`;
 	}
 
 	/**
