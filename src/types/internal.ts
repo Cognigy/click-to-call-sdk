@@ -28,9 +28,7 @@ export interface InternalClientConfig {
 	fullUsername: string;
 	password: string;
 	username: string;
-	/** Present only for runtime (org/project/endpoint-backed) endpoints — absent
-	 *  for legacy ones, which keeps the SDK working against old endpoint
-	 *  configs without any extra headers being sent. */
+	/** Present only for runtime (org/project/endpoint-backed) endpoints. */
 	organisationId?: string;
 	projectId?: string;
 	endpointId?: string;
