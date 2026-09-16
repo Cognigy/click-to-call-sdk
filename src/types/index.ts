@@ -20,6 +20,8 @@ export interface EndpointConfig {
 			active: boolean;
 			label?: string;
 		};
+		/** Absent from older endpoint configs. */
+		endpointId?: string;
 	};
 	settings?: {
 		privacyNotice?: {

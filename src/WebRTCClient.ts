@@ -161,6 +161,9 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 					fullUsername: sipCredentials.fullUsername,
 					password: sipCredentials.password,
 					username: sipCredentials.username,
+					organisationId: sipCredentials.organisationId,
+					projectId: sipCredentials.projectId,
+					endpointId: sipCredentials.endpointId,
 				},
 				{
 					wsUri: sipCredentials.wsUri,
@@ -256,10 +259,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		}
 
 		try {
-			const applicationSid = this.configManager.getApplicationSid();
-			const callTarget = `app-${applicationSid}`;
-
-			this.sipManager.call(callTarget);
+			this.sipManager.call(this.configManager.getCallTarget());
 
 		} catch (error) {
 			throw new Error(`Failed to start call: ${error instanceof Error ? error.message : 'Unknown error'}`);

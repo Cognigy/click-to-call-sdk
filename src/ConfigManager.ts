@@ -84,6 +84,9 @@ export class ConfigManager {
 			wsUri: sipInfo.wsUri,
 			applicationSid: sipInfo.applicationSid,
 			realm: sipInfo.realm,
+			organisationId: this.config.organisationId,
+			projectId: this.config.projectId,
+			endpointId: this.config.endpointSettings.endpointId,
 		};
 	}
 
@@ -96,6 +99,21 @@ export class ConfigManager {
 		}
 
 		return this.config.endpointSettings.sipConnectivityInfo.applicationSid;
+	}
+
+	/** Bare endpointId once identity is declared via headers; legacy
+	 *  app-<applicationSid> target otherwise. */
+	getCallTarget(): string {
+		if (!this.config) {
+			throw new Error('Configuration not loaded');
+		}
+
+		const { organisationId, projectId, endpointSettings } = this.config;
+		const { endpointId } = endpointSettings;
+
+		return organisationId && projectId && endpointId
+			? endpointId
+			: `app-${endpointSettings.sipConnectivityInfo.applicationSid}`;
 	}
 
 	/**
