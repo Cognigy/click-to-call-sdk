@@ -133,6 +133,26 @@ describe('Helper Functions', () => {
 			expect(validateEndpointConfig({})).toBe(false);
 		});
 
+		it('accepts a runtime configuration without legacy SIP credentials', () => {
+			const runtimeConfig = {
+				...mockEndpointConfig,
+				endpointSettings: {
+					...mockEndpointConfig.endpointSettings,
+					endpointId: 'endpoint-1',
+					sipConnectivityInfo: { wsUri: 'wss://sip.example.com:8443' },
+				},
+			};
+			expect(validateEndpointConfig(runtimeConfig)).toBe(true);
+		});
+
+		it('still requires wsUri for a runtime configuration', () => {
+			const runtimeConfig = {
+				...mockEndpointConfig,
+				endpointSettings: { ...mockEndpointConfig.endpointSettings, endpointId: 'endpoint-1', sipConnectivityInfo: {} },
+			};
+			expect(validateEndpointConfig(runtimeConfig)).toBe(false);
+		});
+
 		it('should reject configuration with missing nested properties', () => {
 			const invalidConfig = {
 				...mockEndpointConfig,

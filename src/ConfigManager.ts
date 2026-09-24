@@ -79,6 +79,7 @@ export class ConfigManager {
 
 		return {
 			fullUsername: `${this.userId ?? ''}@${sipInfo.realm}`,
+			userId: this.userId,
 			password: sipInfo.password,
 			username: sipInfo.username,
 			wsUri: sipInfo.wsUri,

@@ -129,6 +129,7 @@ export class MockUA extends EventEmitter {
 		}, 10);
 
 		// Finally emit registered (this is what the WebRTCClient waits for)
+		if (this.config?.register === false) return;
 		setTimeout(() => {
 			console.log('MockUA: Emitting registered');
 			this._isRegistered = true;
@@ -208,6 +209,7 @@ export const MockUASpy = vi.fn(function MockUASpyImpl(this: any, config: any) {
 			this._isConnected = true;
 			this.emit('connected');
 		}, 10);
+		if (this.config?.register === false) return;
 		setTimeout(() => {
 			console.log('MockUA: Emitting registered');
 			this._isRegistered = true;

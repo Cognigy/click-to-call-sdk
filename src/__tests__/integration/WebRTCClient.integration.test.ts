@@ -123,6 +123,7 @@ describe('WebRTCClient Integration Tests', () => {
 				endpointSettings: {
 					...mockEndpointConfig.endpointSettings,
 					endpointId: 'endpoint-1',
+					sipConnectivityInfo: { wsUri: 'wss://sip.example.com:8443' },
 				},
 			};
 			global.fetch = vi.fn().mockResolvedValue({
@@ -133,6 +134,8 @@ describe('WebRTCClient Integration Tests', () => {
 			client = new WebRTCClient(mockWebRTCClientConfig);
 			await client.connect();
 			mockUA = (client as any).sipManager.getUserAgent();
+			expect(mockUA.config).toMatchObject({ register: false });
+			expect(mockUA.config.uri).toBe('sip:test-user-123@sip.example.com');
 
 			await client.startCall();
 

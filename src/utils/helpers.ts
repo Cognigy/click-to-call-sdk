@@ -83,11 +83,16 @@ export function validateEndpointConfig(config: any): boolean {
 		'projectId',
 		'endpointSettings',
 		'endpointSettings.sipConnectivityInfo',
-		'endpointSettings.sipConnectivityInfo.username',
-		'endpointSettings.sipConnectivityInfo.password',
 		'endpointSettings.sipConnectivityInfo.wsUri',
-		'endpointSettings.sipConnectivityInfo.realm',
-		'endpointSettings.sipConnectivityInfo.applicationSid'
+		// Runtime endpoints (declared endpointId) carry no realm or credentials
+		...(getNestedProperty(config, 'endpointSettings.endpointId')
+			? []
+			: [
+					'endpointSettings.sipConnectivityInfo.username',
+					'endpointSettings.sipConnectivityInfo.password',
+					'endpointSettings.sipConnectivityInfo.realm',
+					'endpointSettings.sipConnectivityInfo.applicationSid',
+				]),
 	];
 
 	return required.every(path => {
