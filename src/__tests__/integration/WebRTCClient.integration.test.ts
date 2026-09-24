@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WebRTCClient } from '../../WebRTCClient.js';
 import { COGNIGY_WEBRTC_EVENTS } from '../../utils/events.js';
 import {
+	mockEndpointConfig,
 	mockWebRTCClientConfig,
 	mockFetchResponses,
 } from '../mocks/fixtures.js';
@@ -113,6 +114,31 @@ describe('WebRTCClient Integration Tests', () => {
 
 			expect(events.map(e => e.event)).toContain('ended');
 			expect(client.getCurrentSession()).toBeNull();
+		});
+
+		it('should dial the bare endpointId and thread identity headers through WebRTCClient', async () => {
+			await client.destroy();
+			const runtimeConfig = {
+				...mockEndpointConfig,
+				endpointSettings: {
+					...mockEndpointConfig.endpointSettings,
+					endpointId: 'endpoint-1',
+				},
+			};
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: () => Promise.resolve(runtimeConfig),
+			});
+			client = new WebRTCClient(mockWebRTCClientConfig);
+			await client.connect();
+			mockUA = (client as any).sipManager.getUserAgent();
+
+			await client.startCall();
+
+			expect(mockUA.call).toHaveBeenCalledWith('endpoint-1', expect.objectContaining({
+				extraHeaders: ['X-Source: webrtc', 'X-Organisation-Id: test-org-id', 'X-Project-Id: test-project-id', 'X-Endpoint-Id: endpoint-1'],
+			}));
 		});
 
 		it('should handle call failure', async () => {

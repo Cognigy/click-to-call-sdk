@@ -28,6 +28,10 @@ export interface InternalClientConfig {
 	fullUsername: string;
 	password: string;
 	username: string;
+	/** Present only for runtime (org/project/endpoint-backed) endpoints. */
+	organisationId?: string;
+	projectId?: string;
+	endpointId?: string;
 }
 
 // Internal client settings

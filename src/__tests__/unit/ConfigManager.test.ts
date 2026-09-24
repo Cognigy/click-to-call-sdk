@@ -120,6 +120,49 @@ describe('ConfigManager', () => {
 		});
 	});
 
+	describe('getSipCredentials', () => {
+		it('includes organisationId/projectId/endpointId from the config', async () => {
+			global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.success);
+			await configManager.fetchConfig();
+
+			const credentials = configManager.getSipCredentials();
+			expect(credentials.organisationId).toBe('test-org-id');
+			expect(credentials.projectId).toBe('test-project-id');
+			expect(credentials.endpointId).toBeUndefined();
+		});
+	});
+
+	describe('getCallTarget', () => {
+		it('dials app-<applicationSid> when the config has no endpointId (legacy endpoint)', async () => {
+			global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.success);
+			await configManager.fetchConfig();
+
+			expect(configManager.getCallTarget()).toBe('app-00000000-0000-0000-0000-000000000002');
+		});
+
+		it('dials the bare endpointId once organisationId/projectId/endpointId are all declared', async () => {
+			const runtimeConfig = {
+				...mockEndpointConfig,
+				endpointSettings: {
+					...mockEndpointConfig.endpointSettings,
+					endpointId: 'endpoint-1',
+				},
+			};
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: () => Promise.resolve(runtimeConfig),
+			});
+			await configManager.fetchConfig();
+
+			expect(configManager.getCallTarget()).toBe('endpoint-1');
+		});
+
+		it('throws when config is not loaded', () => {
+			expect(() => configManager.getCallTarget()).toThrow('Configuration not loaded');
+		});
+	});
+
 	describe('isActive', () => {
 		it('should return true when widget is active', async () => {
 			global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.success);
