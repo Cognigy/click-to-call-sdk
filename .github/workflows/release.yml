@@ -38,17 +38,26 @@ jobs:
         with:
           node-version: 20
           cache: "npm"
+          registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint
+        run: npx @biomejs/biome lint .
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm run test:run
+
       - name: Build
         run: npm run build
-
-      - name: Install semantic-release plugins
-        run: npm install --save-dev @semantic-release/changelog @semantic-release/git @semantic-release/exec
 
       - name: Release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          NPM_TOKEN: ${{ secrets.COGNIGY_NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.COGNIGY_NPM_TOKEN }}
         run: npx semantic-release@24

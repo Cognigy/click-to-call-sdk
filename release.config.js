@@ -2,6 +2,7 @@ export default {
   branches: ['main'],
   verifyConditions: [
     '@semantic-release/changelog',
+    '@semantic-release/npm',
     '@semantic-release/github',
     '@semantic-release/git',
   ],
@@ -24,14 +25,7 @@ export default {
         changelogFile: 'CHANGELOG.md',
       },
     ],
-    [
-      '@semantic-release/exec',
-      {
-        prepareCmd:
-          'npm version ${nextRelease.version} --no-git-tag-version --allow-same-version',
-        publishCmd: 'echo "${nextRelease.version}" > .semantic-release-version',
-      },
-    ],
+    '@semantic-release/npm',
     '@semantic-release/github',
     [
       '@semantic-release/git',
