@@ -46,8 +46,7 @@ click-to-call-sdk/
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml            # PR checks: lint, typecheck, test, build
-│   │   ├── release.yml       # semantic-release on push to main
-│   │   ├── publish.yml       # npm publish on tag v*.*.*
+│   │   ├── release.yml       # semantic-release + npm publish on push to main
 │   │   └── pr-title-checker.yml
 │   └── pr-title-checker-config.json
 ├── vite.config.ts            # Build configuration
@@ -110,9 +109,8 @@ npm run clean          # Remove dist/ and coverage/
 ### Workflows
 
 1. **CI** (`ci.yml`): Runs on PR and push to `main`. Jobs: lint, typecheck, test, build (build depends on the other three).
-2. **Release** (`release.yml`): Runs on push to `main`. Uses semantic-release to analyze conventional commits, bump version, update CHANGELOG.md, create git tag.
-3. **Publish** (`publish.yml`): Triggered by tag push `v*.*.*`. Builds, tests, publishes to npm with `secrets.COGNIGY_NPM_TOKEN`, creates GitHub Release.
-4. **PR Title Checker** (`pr-title-checker.yml`): Enforces conventional commit format on PR titles.
+2. **Release** (`release.yml`): Runs on push to `main`. Uses semantic-release to analyze conventional commits, bump version, update CHANGELOG.md, publish to npm with `secrets.COGNIGY_NPM_TOKEN`, create git tag and GitHub Release. Publishing happens in this job because the release commit carries `[skip ci]`, which also suppresses tag-triggered workflows.
+3. **PR Title Checker** (`pr-title-checker.yml`): Enforces conventional commit format on PR titles.
 
 ### npm Publishing
 
@@ -182,7 +180,7 @@ Enforced by commitlint (local) and PR title checker (CI).
 1. Workflow files are in `.github/workflows/`
 2. Use Node 20, `npm ci`, `actions/checkout@v4`, `actions/setup-node@v4`
 3. CI lint uses `npx @biomejs/biome lint .` (no `--write` flag)
-4. Publish uses `NODE_AUTH_TOKEN` from `secrets.COGNIGY_NPM_TOKEN`
+4. Release publishes via `@semantic-release/npm` using `NPM_TOKEN`/`NODE_AUTH_TOKEN` from `secrets.COGNIGY_NPM_TOKEN`
 
 ### Build Output
 

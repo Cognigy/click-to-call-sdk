@@ -9,4 +9,3 @@ tsconfig.json
 vite*.ts
 *.js.map
 .npmrc
-.semantic-release-version
