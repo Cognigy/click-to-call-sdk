@@ -93,6 +93,7 @@ export const COGNIGY_WEBRTC_EVENTS = {
 
 	// Communication events
 	INFO_SENT: 'infoSent',
+	DTMF_SENT: 'dtmfSent',
 
 	// Error events
 	ERROR: 'error',

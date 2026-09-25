@@ -4,13 +4,14 @@
  */
 
 import { Grammar } from 'jssip';
+import type { DTMFOptions } from 'jssip/lib/RTCSession';
 import type { IncomingResponse } from 'jssip/lib/SIPMessage';
 import { SDKEventEmitter, COGNIGY_WEBRTC_EVENTS } from './utils/events.js';
 import type {
 	ExtendedRTCSession,
 	SessionState,
 } from './types/internal.js';
-import type { CallSession } from './types/index.js';
+import type { CallSession, SendDTMFOptions } from './types/index.js';
 import { randomId } from './utils/helpers.js';
 
 export class SessionManager extends SDKEventEmitter {
@@ -367,16 +368,16 @@ export class SessionManager extends SDKEventEmitter {
 	/**
 	 * Send DTMF tones
 	 */
-	// sendDTMF(tones: string | number): void {
-	// 	console.log('sendDTMF',tones);
-	// 	const sessionState = this.getActiveSessionState();
-	// 	if (sessionState && sessionState.rtcSession.isEstablished()) {
-	// 		sessionState.rtcSession.sendDTMF(tones);
-	// 		this.emit(COGNIGY_WEBRTC_EVENTS.DTMF_SENT, tones.toString());
-	// 	} else {
-	// 		throw new Error('No active session to send DTMF');
-	// 	}
-	// }
+	sendDTMF(tones: string | number, options?: SendDTMFOptions): void {
+		const sessionState = this.getActiveSessionState();
+		if (sessionState?.rtcSession?.isEstablished()) {
+			// SendDTMFOptions' transportType literals match JsSIP's DTMF_TRANSPORT string enum values
+			sessionState.rtcSession.sendDTMF(tones, options as DTMFOptions);
+			this.emit(COGNIGY_WEBRTC_EVENTS.DTMF_SENT, String(tones));
+		} else {
+			throw new Error('No active session to send DTMF');
+		}
+	}
 
 	/**
 	 * Send info message

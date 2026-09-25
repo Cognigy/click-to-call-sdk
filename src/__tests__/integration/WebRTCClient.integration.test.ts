@@ -240,6 +240,48 @@ describe('WebRTCClient Integration Tests', () => {
 				{ text: 'another message', data: {} },
 			]);
 		});
+
+		it('should send DTMF tones during call', async () => {
+			const dtmfEvents: string[] = [];
+
+			client.on(COGNIGY_WEBRTC_EVENTS.DTMF_SENT, (tones) => dtmfEvents.push(tones));
+
+			await client.startCall();
+
+			// Wait for the automatic progress event from mock UA
+			await new Promise(resolve => setTimeout(resolve, 20));
+
+			const session = mockUA.getLastSession();
+			session.simulateAccepted();
+
+			await new Promise(resolve => setTimeout(resolve, 50));
+
+			await expect(client.sendDTMF('1')).resolves.toBeUndefined();
+			await client.sendDTMF(2, { transportType: 'RFC2833' });
+
+			expect(session.sendDTMF).toHaveBeenNthCalledWith(1, '1', undefined);
+			expect(session.sendDTMF).toHaveBeenNthCalledWith(2, 2, { transportType: 'RFC2833' });
+			expect(dtmfEvents).toEqual(['1', '2']);
+		});
+
+		it('should reject DTMF without an active call', async () => {
+			await expect(client.sendDTMF('1')).rejects.toThrow('Failed to send DTMF: No active session to send DTMF');
+		});
+
+		it('should surface invalid DTMF tones as a readable rejection', async () => {
+			await client.startCall();
+
+			// Wait for the automatic progress event from mock UA
+			await new Promise(resolve => setTimeout(resolve, 20));
+
+			const session = mockUA.getLastSession();
+			session.simulateAccepted();
+			session.sendDTMF.mockImplementation(() => {
+				throw new TypeError('Invalid tones: x');
+			});
+
+			await expect(client.sendDTMF('x')).rejects.toThrow('Failed to send DTMF: Invalid tones: x');
+		});
 	});
 
 	describe('Audio Integration', () => {
@@ -404,6 +446,7 @@ describe('WebRTCClient Integration Tests', () => {
 			session.emit('muted');
 
 			await client.sendInfo('test', {});
+			await client.sendDTMF('1');
 
 			await client.endCall();
 			session.simulateEnded();
@@ -415,6 +458,7 @@ describe('WebRTCClient Integration Tests', () => {
 			expect(eventNames).toContain(COGNIGY_WEBRTC_EVENTS.ANSWERED);
 			expect(eventNames).toContain(COGNIGY_WEBRTC_EVENTS.MUTED);
 			expect(eventNames).toContain(COGNIGY_WEBRTC_EVENTS.INFO_SENT);
+			expect(eventNames).toContain(COGNIGY_WEBRTC_EVENTS.DTMF_SENT);
 			expect(eventNames).toContain(COGNIGY_WEBRTC_EVENTS.ENDED);
 		});
 	});
