@@ -73,6 +73,7 @@ interface WebRTCClientConfig {
 | `endCall()`             | End the current call                         |
 | `mute()` / `unmute()`   | Toggle microphone                            |
 | `sendInfo(text, data?)` | Send info message during a call              |
+| `sendDTMF(tones, options?)` | Send DTMF tones (`0-9 A-D # * ,`) during a call |
 | `isConnected()`         | Check connection state                       |
 | `getCurrentSession()`   | Get active `CallSession` or `null`           |
 | `on(event, callback)`   | Add event listener (returns `this`)          |
@@ -97,6 +98,7 @@ interface WebRTCClientConfig {
 | `captureAudio`  | Remote audio stream available (requires opt-in) `(stream: MediaStream)` |
 | `audioEnded`    | `()`                                                                    |
 | `infoSent`      | `(text: string, data: Record<string, any>)`                             |
+| `dtmfSent`      | `(tones: string)`                                                       |
 | `infoReceived`  | `(data: { originator: string; info: { body: string } })`                |
 | `transcription` | `(transcription: { originator: string; messages: { text: string }[] })` |
 | `error`         | `(error: Error)`                                                        |

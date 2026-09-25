@@ -276,6 +276,7 @@ describe('Error Handling and Edge Cases', () => {
 			// expect(() => sessionManager.unmute()).toThrow('No active session to unmute');
 			expect(() => sessionManager.terminate()).toThrow('No active session to terminate');
 			expect(() => sessionManager.sendInfo('test')).toThrow('No active session to send info');
+			expect(() => sessionManager.sendDTMF('1')).toThrow('No active session to send DTMF');
 		});
 
 		it('should handle invalid session ID', () => {
