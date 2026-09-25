@@ -109,13 +109,13 @@ npm run clean          # Remove dist/ and coverage/
 ### Workflows
 
 1. **CI** (`ci.yml`): Runs on PR and push to `main`. Jobs: lint, typecheck, test, build (build depends on the other three).
-2. **Release** (`release.yml`): Runs on push to `main`. Uses semantic-release to analyze conventional commits, bump version, update CHANGELOG.md, publish to npm with `secrets.COGNIGY_NPM_TOKEN`, create git tag and GitHub Release. Publishing happens in this job because the release commit carries `[skip ci]`, which also suppresses tag-triggered workflows.
+2. **Release** (`release.yml`): Runs on push to `main`. Uses semantic-release to analyze conventional commits, bump version, update CHANGELOG.md, publish to npm via trusted publishing (OIDC), create git tag and GitHub Release. Publishing happens in this job because the release commit carries `[skip ci]`, which also suppresses tag-triggered workflows.
 3. **PR Title Checker** (`pr-title-checker.yml`): Enforces conventional commit format on PR titles.
 
 ### npm Publishing
 
 - Registry: `https://registry.npmjs.org/`
-- Authentication: `NODE_AUTH_TOKEN` from `secrets.COGNIGY_NPM_TOKEN`
+- Authentication: npm trusted publishing (OIDC) for `release.yml`; no npm token
 - Access: `--access public` (scoped under `@cognigy`)
 
 ## Testing
@@ -180,7 +180,7 @@ Enforced by commitlint (local) and PR title checker (CI).
 1. Workflow files are in `.github/workflows/`
 2. Use Node 20, `npm ci`, `actions/checkout@v4`, `actions/setup-node@v4`
 3. CI lint uses `npx @biomejs/biome lint .` (no `--write` flag)
-4. Release publishes via `@semantic-release/npm` using `NPM_TOKEN`/`NODE_AUTH_TOKEN` from `secrets.COGNIGY_NPM_TOKEN`
+4. Release publishes via `@semantic-release/npm` with npm trusted publishing: needs `id-token: write`, Node 24 (npm >= 11.5.1), and no `NPM_TOKEN`/`NODE_AUTH_TOKEN`. The trusted publisher on npmjs.com is bound to the `release.yml` filename.
 
 ### Build Output
 
