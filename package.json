@@ -1,6 +1,6 @@
 {
   "name": "@cognigy/click-to-call-sdk",
-  "version": "0.0.6",
+  "version": "0.1.0",
   "description": "A standalone WebRTC SDK for SIP-based voice calling with custom audio support",
   "main": "dist/webRTCSDK.cjs.js",
   "module": "dist/webRTCSDK.es.js",
@@ -46,6 +46,9 @@
     "@biomejs/biome": "^2.4.4",
     "@commitlint/cli": "^20.5.0",
     "@commitlint/config-conventional": "^20.5.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/exec": "^7.1.0",
+    "@semantic-release/git": "^10.0.1",
     "@types/node": "^25.3.0",
     "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
