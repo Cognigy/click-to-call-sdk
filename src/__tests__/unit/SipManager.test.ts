@@ -265,6 +265,48 @@ describe('SipManager', () => {
 			}));
 		});
 
+		it('registers with the realm credentials for a legacy endpoint', () => {
+			sipManager = new SipManager();
+			sipManager.initialize(mockClientConfig, mockSettings);
+
+			expect(MockUASpy).toHaveBeenCalledWith(expect.objectContaining({
+				uri: 'sip:test@example.com',
+				password: 'password123',
+				authorization_user: 'test',
+				register: true,
+			}));
+			expect(sipManager.needsRegistration()).toBe(true);
+		});
+
+		it('does not register and uses userId with the wsUri host for a runtime endpoint', async () => {
+			sipManager = new SipManager();
+			sipManager.initialize(
+				{ ...mockClientConfig, userId: 'webrtc-sdk-demo-abc', organisationId: 'org-1', projectId: 'proj-1', endpointId: 'endpoint-1' },
+				mockSettings
+			);
+			mockUA = sipManager.getUserAgent() as unknown as MockUA;
+
+			const config = MockUASpy.mock.calls[0][0];
+			expect(config).toMatchObject({ uri: 'sip:webrtc-sdk-demo-abc@example.com', register: false });
+			expect(config).not.toHaveProperty('password');
+			expect(config).not.toHaveProperty('authorization_user');
+			expect(sipManager.needsRegistration()).toBe(false);
+
+			await startAndRegister();
+			expect(sipManager.isRegistered()).toBe(false);
+			expect(() => sipManager.call('endpoint-1')).not.toThrow();
+		});
+
+		it('falls back to anonymous when a runtime endpoint has no userId', () => {
+			sipManager = new SipManager();
+			sipManager.initialize(
+				{ ...mockClientConfig, organisationId: 'org-1', projectId: 'proj-1', endpointId: 'endpoint-1' },
+				mockSettings
+			);
+
+			expect(MockUASpy).toHaveBeenCalledWith(expect.objectContaining({ uri: 'sip:anonymous@example.com' }));
+		});
+
 		it('sends no identity headers when only one of organisationId/projectId is known', async () => {
 			sipManager = new SipManager();
 			sipManager.initialize({ ...mockClientConfig, organisationId: 'org-1' }, mockSettings);

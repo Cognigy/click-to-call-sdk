@@ -161,6 +161,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 					fullUsername: sipCredentials.fullUsername,
 					password: sipCredentials.password,
 					username: sipCredentials.username,
+					userId: sipCredentials.userId,
 					organisationId: sipCredentials.organisationId,
 					projectId: sipCredentials.projectId,
 					endpointId: sipCredentials.endpointId,
@@ -178,7 +179,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 			await withTimeout(
 				new Promise<void>((resolve, reject) => {
 					let connected = false;
-					let registered = false;
+					let registered = !this.sipManager.needsRegistration();
 
 					const onConnected = () => {
 						connected = true;
@@ -254,7 +255,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 			throw new Error('Client not connected. Call connect() first.');
 		}
 
-		if (!this.sipManager.isRegistered()) {
+		if (this.sipManager.needsRegistration() && !this.sipManager.isRegistered()) {
 			throw new Error('SIP client not registered');
 		}
 

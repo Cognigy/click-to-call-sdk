@@ -19,6 +19,7 @@ export class SipManager extends SDKEventEmitter {
 	private ua: IUA | null = null;
 	private pcConfig?: RTCConfiguration;
 	private identityHeaders: string[] = [];
+	private requiresRegistration = true;
 	private state: SipManagerState = {
 		ua: null,
 		connected: false,
@@ -47,15 +48,24 @@ export class SipManager extends SDKEventEmitter {
 		console.log('Creating SIP client with config:', { client, settings }, settings.pcConfig);
 
 		const socket = new WebSocketInterface(settings.wsUri);
-		const uri = `sip:${client.fullUsername}`;
 
-		const uaConfig = {
-			uri,
-			password: client.password,
-			authorization_user: client.username,
-			sockets: [socket],
-			register: true,
-		};
+		// Runtime endpoints have no realm or credentials; the SBC admits them by the
+		// declared identity headers only, and nothing needs to reach this UA, so skip
+		// REGISTER. The host just has to parse — the resolver ignores it.
+		this.requiresRegistration = !(client.organisationId && client.projectId && client.endpointId);
+		const uaConfig = this.requiresRegistration
+			? {
+					uri: `sip:${client.fullUsername}`,
+					password: client.password,
+					authorization_user: client.username,
+					sockets: [socket],
+					register: true,
+				}
+			: {
+					uri: `sip:${client.userId || 'anonymous'}@${new URL(settings.wsUri).hostname}`,
+					sockets: [socket],
+					register: false,
+				};
 
 		this.ua = new UA(uaConfig);
 		this.state.ua = this.ua;
@@ -186,7 +196,7 @@ export class SipManager extends SDKEventEmitter {
 			throw new Error('SIP manager not initialized');
 		}
 
-		if (!this.state.registered) {
+		if (this.requiresRegistration && !this.state.registered) {
 			throw new Error('SIP client not registered');
 		}
 
@@ -222,6 +232,13 @@ export class SipManager extends SDKEventEmitter {
 	 */
 	isConnected(): boolean {
 		return this.state.connected;
+	}
+
+	/**
+	 * Whether calls need a prior REGISTER (false for runtime endpoints)
+	 */
+	needsRegistration(): boolean {
+		return this.requiresRegistration;
 	}
 
 	/**
