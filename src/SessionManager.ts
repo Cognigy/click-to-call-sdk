@@ -372,7 +372,7 @@ export class SessionManager extends SDKEventEmitter {
 		const sessionState = this.getActiveSessionState();
 		if (sessionState?.rtcSession?.isEstablished()) {
 			// SendDTMFOptions' transportType literals match JsSIP's DTMF_TRANSPORT string enum values
-			sessionState.rtcSession.sendDTMF(tones, options as DTMFOptions);
+			sessionState.rtcSession.sendDTMF(String(tones), options as DTMFOptions);
 			this.emit(COGNIGY_WEBRTC_EVENTS.DTMF_SENT, String(tones));
 		} else {
 			throw new Error('No active session to send DTMF');
