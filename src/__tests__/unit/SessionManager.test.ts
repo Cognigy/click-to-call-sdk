@@ -47,7 +47,7 @@ describe('SessionManager', () => {
 
 			sessionManager.sendDTMF(42);
 
-			expect(rtcSession.sendDTMF).toHaveBeenCalledWith(42, undefined);
+			expect(rtcSession.sendDTMF).toHaveBeenCalledWith('42', undefined);
 			expect(dtmfSpy).toHaveBeenCalledWith('42');
 		});
 

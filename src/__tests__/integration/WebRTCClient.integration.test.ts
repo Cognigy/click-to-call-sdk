@@ -260,7 +260,7 @@ describe('WebRTCClient Integration Tests', () => {
 			await client.sendDTMF(2, { transportType: 'RFC2833' });
 
 			expect(session.sendDTMF).toHaveBeenNthCalledWith(1, '1', undefined);
-			expect(session.sendDTMF).toHaveBeenNthCalledWith(2, 2, { transportType: 'RFC2833' });
+			expect(session.sendDTMF).toHaveBeenNthCalledWith(2, '2', { transportType: 'RFC2833' });
 			expect(dtmfEvents).toEqual(['1', '2']);
 		});
 
