@@ -1,3 +1,10 @@
+# [0.2.0](https://github.com/Cognigy/click-to-call-sdk/compare/v0.1.1...v0.2.0) (2026-09-28)
+
+
+### Features
+
+* **session:** send DTMF tones during a call (CGY-40577) ([#11](https://github.com/Cognigy/click-to-call-sdk/issues/11)) ([083641c](https://github.com/Cognigy/click-to-call-sdk/commit/083641c6bbc1127ba5dd2535decda6a79e8d6598))
+
 ## [0.1.1](https://github.com/Cognigy/click-to-call-sdk/compare/v0.1.0...v0.1.1) (2026-09-25)
 
 
