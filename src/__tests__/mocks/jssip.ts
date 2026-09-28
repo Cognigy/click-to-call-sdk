@@ -31,6 +31,7 @@ export class MockRTCSession extends EventEmitter {
 	hold = vi.fn();
 	unhold = vi.fn();
 	sendInfo = vi.fn();
+	sendDTMF = vi.fn();
 
 	// Simulate call progression
 	simulateProgress() {

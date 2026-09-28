@@ -22,6 +22,7 @@ export type {
 	EventName,
 	EventCallback,
 	WebRTCClientEvents,
+	SendDTMFOptions,
 } from './types/index.js';
 
 // Export main client class

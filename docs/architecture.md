@@ -52,7 +52,7 @@ The **orchestrator**. It owns the four managers and wires their internal events 
 **Responsibilities:**
 
 - Lifecycle management (`connect`, `disconnect`, `destroy`).
-- Call control (`startCall`, `endCall`, `mute`, `unmute`, `sendInfo`).
+- Call control (`startCall`, `endCall`, `mute`, `unmute`, `sendInfo`, `sendDTMF`).
 - Forwarding events from internal managers to the consumer.
 - Ensuring correct call sequence (e.g., must connect before calling).
 
@@ -111,7 +111,7 @@ Manages the lifecycle of individual call sessions (RTCSessions from JsSIP).
 - Creates `SessionState` objects for each new RTC session.
 - Attaches event handlers: `connecting`, `progress` (ringing), `accepted` (answered), `failed`, `ended`, `muted/unmuted`, `hold/unhold`, `sdp`, `newInfo`.
 - Manages active session tracking (only one session active at a time).
-- Provides call control: `mute()`, `unmute()`, `terminate()`, `sendInfo()`.
+- Provides call control: `mute()`, `unmute()`, `terminate()`, `sendInfo()`, `sendDTMF()`.
 - Parses incoming info messages and separates transcription events (`_transcription` payload) from regular info messages.
 - Converts internal `SessionState` to public `CallSession` objects.
 - Wires peer connection handlers for remote audio stream delivery to `AudioManager`.
@@ -146,7 +146,7 @@ A custom `SDKEventEmitter` extending Node.js `EventEmitter` (polyfilled for brow
 | Connection    | `connecting`, `connected`, `disconnected`, `registered`, `unregistered` |
 | Call          | `ringing`, `answered`, `ended`, `failed`                                |
 | Audio         | `muted`, `unmuted`, `audioEnded`, `captureAudio`                        |
-| Communication | `infoSent`, `infoReceived`, `transcription`                             |
+| Communication | `infoSent`, `dtmfSent`, `infoReceived`, `transcription`                 |
 | Internal      | `sessionCreated`, `sessionUpdated`, `sessionDestroyed`                  |
 | Error         | `error`                                                                 |
 

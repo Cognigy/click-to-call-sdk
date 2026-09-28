@@ -14,7 +14,8 @@ import type {
 	WebRTCClientConfig,
 	CallSession,
 	EventName,
-	EventCallback
+	EventCallback,
+	SendDTMFOptions
 } from './types/index.js';
 
 export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
@@ -113,6 +114,10 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 
 		this.sessionManager.on(COGNIGY_WEBRTC_EVENTS.INFO_SENT, (text, data) => {
 			this.emit(COGNIGY_WEBRTC_EVENTS.INFO_SENT, text, data);
+		});
+
+		this.sessionManager.on(COGNIGY_WEBRTC_EVENTS.DTMF_SENT, (tones) => {
+			this.emit(COGNIGY_WEBRTC_EVENTS.DTMF_SENT, tones);
 		});
 
 		this.sessionManager.on(COGNIGY_WEBRTC_EVENTS.INFO_RECEIVED, (info) => {
@@ -308,13 +313,13 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	/**
 	 * Send DTMF tones
 	 */
-	// async sendDTMF(tones: string | number): Promise<void> {
-	// 	try {
-	// 		this.sessionManager.sendDTMF(tones);
-	// 	} catch (error) {
-	// 		throw new Error(`Failed to send DTMF: ${error instanceof Error ? error.message : 'Unknown error'}`);
-	// 	}
-	// }
+	async sendDTMF(tones: string | number, options?: SendDTMFOptions): Promise<void> {
+		try {
+			this.sessionManager.sendDTMF(tones, options);
+		} catch (error) {
+			throw new Error(`Failed to send DTMF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		}
+	}
 
 	/**
 	 * Send info message

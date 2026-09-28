@@ -73,6 +73,15 @@ export interface CallEndInfo {
 	description?: string | null;
 }
 
+export interface SendDTMFOptions {
+	/** Tone duration in ms. JsSIP enforces its own default and minimum. */
+	duration?: number;
+	/** Gap between tones in ms. */
+	interToneGap?: number;
+	/** Defaults to `'INFO'` (SIP INFO), which is what Voice Gateway expects. */
+	transportType?: 'INFO' | 'RFC2833';
+}
+
 // Event callback types
 export interface WebRTCClientEvents {
 	'connecting': () => void;
@@ -88,6 +97,7 @@ export interface WebRTCClientEvents {
 	'unmuted': (session: CallSession) => void;
 	'audioEnded': () => void;
 	'infoSent': (text: string, data: Record<string, any>) => void;
+	'dtmfSent': (tones: string) => void;
 	'infoReceived': (data: { originator: string; info: any }) => void;
 	'error': (error: Error) => void;
 	'captureAudio': (stream: MediaStream) => void;
@@ -108,7 +118,7 @@ export interface WebRTCClient {
 	unmute(): Promise<void>;
 
 	// Communication methods
-	// sendDTMF(tones: string | number): Promise<void>; //DTMF is not supported in the SDK
+	sendDTMF(tones: string | number, options?: SendDTMFOptions): Promise<void>;
 	sendInfo(text: string, data?: Record<string, any>): Promise<void>;
 
 	// Event handling

@@ -200,7 +200,7 @@ Events are defined in `src/utils/events.ts` as `COGNIGY_WEBRTC_EVENTS`:
 | Connection | `connecting`, `connected`, `disconnected`, `registered`, `unregistered` |
 | Call | `ringing`, `answered`, `ended`, `failed` |
 | Audio | `muted`, `unmuted`, `audioEnded`, `captureAudio` |
-| Communication | `infoSent`, `infoReceived`, `transcription` |
+| Communication | `infoSent`, `dtmfSent`, `infoReceived`, `transcription` |
 | Internal | `sessionCreated`, `sessionUpdated`, `sessionDestroyed` |
 | Error | `error` |
 
