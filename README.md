@@ -59,14 +59,15 @@ interface WebRTCClientConfig {
   userId?: string;            // Optional user identifier
   pcConfig?: RTCConfiguration; // WebRTC peer connection config
   captureAudio?: boolean;     // Enable captureAudio event to receive raw MediaStream
-  callSetupTimeoutMs?: number; // Fail the call if no SIP session exists this long after connect()/startCall()
+  callSetupTimeoutMs?: number; // Fail the call if no SIP session exists this long after the attempt started
   disconnectAfterCall?: boolean; // Stop the SIP UA once a call ends or fails (default: false)
 }
 ```
 
 - `callSetupTimeoutMs` has no default: unset or `0` means no timer. When set, the timer starts on
-  `connect()` / `startCall()` and is cleared as soon as the SIP session is created (INVITE sent), not when the
-  call is answered. On expiry the call fails with cause `SETUP_TIMEOUT` and `connect()` rejects.
+  `connect()`; `startCall()` re-arms it only on a client that already completed a call (a new call without a new
+  `connect()`). It is cleared as soon as the SIP session is created (INVITE sent), not when the call is answered.
+  On expiry the call fails with cause `SETUP_TIMEOUT` and a pending `connect()` rejects.
 - `disconnectAfterCall` stops the SIP UA after the call ends or fails. The next `connect()` starts a new one.
 
 ## API
@@ -78,7 +79,7 @@ interface WebRTCClientConfig {
 | `setUserId(id)`         | Override the SIP user id. Throws once the SIP UA exists (`connect()` started, until `disconnect()`) |
 | `connect()`             | Connect to SIP server and register; starts a new call attempt (state `connecting`). Rejects on config, registration or connection failure, on setup timeout, and when cancelled via `endCall()` / `disconnect()` |
 | `disconnect()`          | Disconnect from SIP server; cancels a pending `connect()` |
-| `connectAndCall()`      | Connect + start call in one step; rejects like `connect()` |
+| `connectAndCall()`      | Connect + start call in one step; rejects like `connect()`, also with `Failed to connect: <cause>` when cancelled or timed out after connecting but before dialing |
 | `startCall()`           | Start a call (must be connected first)       |
 | `endCall()`             | End the current call; also works while ringing and cancels a pending `connect()` |
 | `mute()` / `unmute()`   | Toggle microphone (requires an answered call) |
@@ -103,7 +104,7 @@ interface WebRTCClientConfig {
 | `registered`    | `()`                                                                    |
 | `unregistered`  | `()`                                                                    |
 | `registrationFailed` | `(info: { cause: string; response?: { status_code: number; reason_phrase: string } })` |
-| `sessionCreated` | SIP session created, INVITE sent `(session: CallSession)`              |
+| `sessionCreated`| SIP session created, INVITE sent `(session: CallSession)`               |
 | `ringing`       | `(session: CallSession)`                                                |
 | `answered`      | `(session: CallSession)`                                                |
 | `ended`         | `(session: CallSession, endInfo: CallEndInfo)`                          |
@@ -155,8 +156,8 @@ const unsubscribe = client.subscribe((state) => {
 unsubscribe();
 ```
 
-`connect()` / `startCall()` reset the state to `connecting`. A call that ends before a SIP session exists (via
-`endCall()` / `disconnect()`) ends with cause `Canceled`.
+`connect()` resets the state to `connecting`; so does `startCall()` on a client that already completed a call. A
+call that ends before a SIP session exists (via `endCall()` / `disconnect()`) ends with cause `Canceled`.
 
 ### `SDK_END_CAUSES`
 
@@ -169,6 +170,13 @@ unsubscribe();
 | `WIDGET_INACTIVE`       | The widget is not active in the endpoint config             |
 | `REGISTRATION_FAILED`   | SIP registration failed                                     |
 | `SETUP_TIMEOUT`         | No SIP session within `callSetupTimeoutMs`                  |
+
+The SDK also sets two causes that are not in `SDK_END_CAUSES`:
+
+| Cause                   | Meaning                                                     |
+|-------------------------|-------------------------------------------------------------|
+| `Connection Error`      | `connect()` failed at the transport, or the transport was lost while a session existed |
+| `Internal Error`        | JsSIP rejected `startCall()` (e.g. invalid target); `endInfo.description` has the message |
 
 ## Bundling
 
