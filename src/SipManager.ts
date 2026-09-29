@@ -77,22 +77,32 @@ export class SipManager extends SDKEventEmitter {
 	 * Set up event handlers for the UA
 	 */
 	private setupEventHandlers(): void {
-		if (!this.ua) return;
+		const ua = this.ua;
+		if (!ua) return;
+		// A stopped UA keeps emitting (e.g. disconnected once its socket closes);
+		// those events must not touch the state of the UA that replaced it.
+		const on = (event: string, handler: (data: any) => void) => {
+			ua.on(event as any, (data: any) => {
+				if (this.ua === ua) {
+					handler(data);
+				}
+			});
+		};
 
-		this.ua.on('connecting', () => {
+		on('connecting', () => {
 			console.log('SIP connecting');
 			this.state.connecting = true;
 			this.emit(COGNIGY_WEBRTC_EVENTS.CONNECTING);
 		});
 
-		this.ua.on('connected', (data: any) => {
+		on('connected', (data: any) => {
 			console.log('SIP connected:', data);
 			this.state.connected = true;
 			this.state.connecting = false;
 			this.emit(COGNIGY_WEBRTC_EVENTS.CONNECTED, data);
 		});
 
-		this.ua.on('disconnected', (data: any) => {
+		on('disconnected', (data: any) => {
 			console.log('SIP disconnected:', data);
 			this.state.connected = false;
 			this.state.registered = false;
@@ -103,20 +113,20 @@ export class SipManager extends SDKEventEmitter {
 		});
 
 		// Registration events
-		this.ua.on('registered', (data: any) => {
+		on('registered', (data: any) => {
 			console.log('SIP registered:', data);
 			this.state.registered = true;
 			this.emit(COGNIGY_WEBRTC_EVENTS.REGISTERED, data);
 		});
 
-		this.ua.on('unregistered', (data: any) => {
+		on('unregistered', (data: any) => {
 			console.log('SIP unregistered:', data);
 			this.state.registered = false;
 			this.emit(COGNIGY_WEBRTC_EVENTS.UNREGISTERED, data);
 		});
 
 		// New RTC session events
-		this.ua.on('newRTCSession', (data: any) => {
+		on('newRTCSession', (data: any) => {
 			const rtcSession = data.session as ExtendedRTCSession;
 
 			this.handleNewSession(rtcSession);
@@ -124,7 +134,7 @@ export class SipManager extends SDKEventEmitter {
 		});
 
 		// Registration failure
-		this.ua.on('registrationFailed', (data: any) => {
+		on('registrationFailed', (data: any) => {
 			console.error('SIP registration failed:', data);
 			// Map instead of forwarding the JsSIP response, which carries the whole message
 			const info: RegistrationFailedInfo = { cause: data.cause };
@@ -185,9 +195,10 @@ export class SipManager extends SDKEventEmitter {
 	 * Stop the SIP user agent
 	 */
 	stop(): void {
-		if (this.ua) {
+		const ua = this.ua;
+		if (ua) {
 			console.log('Stopping SIP user agent');
-			this.ua.stop();
+			// Detach first so events emitted while stopping are ignored
 			this.ua = null;
 			this.state = {
 				ua: null,
@@ -195,6 +206,7 @@ export class SipManager extends SDKEventEmitter {
 				registered: false,
 				connecting: false,
 			};
+			ua.stop();
 		}
 	}
 
