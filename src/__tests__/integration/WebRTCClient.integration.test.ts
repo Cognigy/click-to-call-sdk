@@ -207,6 +207,57 @@ describe('WebRTCClient Integration Tests', () => {
 			expect(client.getCurrentSession()).toBeNull();
 		});
 
+		it('subscribe returns an unsubscribe function', () => {
+			const listener = vi.fn();
+			const unsubscribe = client.subscribe(listener);
+			expect(listener).not.toHaveBeenCalled();
+
+			(client as any).callStateStore.update({ muted: true });
+			expect(listener).toHaveBeenCalledTimes(1);
+			expect(listener.mock.calls[0][0]).toBe(client.getState());
+
+			unsubscribe();
+			(client as any).callStateStore.update({ muted: false });
+			expect(listener).toHaveBeenCalledTimes(1);
+		});
+
+		it('records transcription messages in state', async () => {
+			const session = (client as any).sessionManager;
+			session.emit(COGNIGY_WEBRTC_EVENTS.TRANSCRIPTION, { originator: 'bot', messages: [{ text: 'hi' }] });
+			expect(client.getState().transcript.map((m) => m.text)).toEqual(['hi']);
+		});
+
+		it('tracks stream changes in state', () => {
+			const remote = {} as MediaStream;
+			const local = {} as MediaStream;
+			(client as any).sessionManager.emit(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, remote, local);
+			expect(client.getState().remoteStream).toBe(remote);
+			expect(client.getState().localStream).toBe(local);
+		});
+
+		it('tracks ringing, answered and ended through a full call', async () => {
+			const fresh = new WebRTCClient(mockWebRTCClientConfig);
+			try {
+				const statuses: string[] = [];
+				fresh.subscribe((s) => statuses.push(s.status));
+				await fresh.connect();
+				await fresh.startCall();
+				await new Promise((resolve) => setTimeout(resolve, 20));
+				const ua = (fresh as any).sipManager.getUserAgent() as MockUAType;
+				const session = ua.getLastSession();
+				expect(fresh.getState().session).toBeTruthy();
+				session.simulateAccepted();
+				session.emit('muted');
+				expect(fresh.getState().muted).toBe(true);
+				session.simulateEnded();
+
+				expect(statuses.filter((s, i) => s !== statuses[i - 1])).toEqual(['connecting', 'ringing', 'answered', 'ended']);
+				expect(fresh.getState().endInfo).toBeTruthy();
+			} finally {
+				await fresh.destroy();
+			}
+		});
+
 		it('emits sessionCreated on the client synchronously on newRTCSession', async () => {
 			const order: string[] = [];
 			client.on('sessionCreated', (session) => order.push(`created:${session.status}`));
