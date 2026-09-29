@@ -54,7 +54,8 @@ describe('WebRTCClient call lifecycle', () => {
 	let client: WebRTCClient;
 
 	const create = (config: Partial<WebRTCClientConfig> = {}) => {
-		client = new WebRTCClient({ ...mockWebRTCClientConfig, ...config });
+		// The widget passes 10000; the SDK itself has no default timer
+		client = new WebRTCClient({ ...mockWebRTCClientConfig, callSetupTimeoutMs: 10_000, ...config });
 		return client;
 	};
 
@@ -149,6 +150,17 @@ describe('WebRTCClient call lifecycle', () => {
 			expect(client.getState().status).toBe('ringing');
 		});
 
+		it('arms no timer without callSetupTimeoutMs', async () => {
+			client = new WebRTCClient(mockWebRTCClientConfig);
+			await connect();
+
+			await vi.advanceTimersByTimeAsync(20_000);
+
+			expect(client.isConnected()).toBe(true);
+			expect(client.getState().status).toBe('connecting');
+			expect(lastUA().stop).not.toHaveBeenCalled();
+		});
+
 		it('honours a custom callSetupTimeoutMs', async () => {
 			ua.silentCall = true;
 			create({ callSetupTimeoutMs: 3000 });
@@ -232,6 +244,23 @@ describe('WebRTCClient call lifecycle', () => {
 			expect(lastUA().stop).not.toHaveBeenCalled();
 		});
 
+		it('still emits disconnected after disconnect() without changing state', async () => {
+			create();
+			await connect();
+			const disconnected = vi.fn();
+			client.on('disconnected', disconnected);
+			await client.disconnect();
+			const states = vi.fn();
+			client.subscribe(states);
+
+			// MockUA.stop emits disconnected 50 ms later
+			await vi.advanceTimersByTimeAsync(60);
+
+			expect(disconnected).toHaveBeenCalledTimes(1);
+			expect(states).not.toHaveBeenCalled();
+			expect(client.isConnected()).toBe(false);
+		});
+
 		it('ignores disconnected from a UA that was already stopped', async () => {
 			create({ disconnectAfterCall: true });
 			const first = await ring();
@@ -272,6 +301,26 @@ describe('WebRTCClient call lifecycle', () => {
 			expect(events).toEqual(['ringing', 'answered', 'ringing', 'answered']);
 			expect(statuses.filter((s, i) => s !== statuses[i - 1])).toEqual(['connecting', 'ringing', 'answered']);
 			expect(client.getState().status).toBe('answered');
+		});
+
+		it('connect() from a stateChanged listener on ended is not aborted by the auto-disconnect', async () => {
+			create({ disconnectAfterCall: true });
+			const first = await ring();
+			let next: Promise<void> | null = null;
+			client.subscribe((s) => {
+				if (s.status === 'ended' && !next) next = client.connect();
+			});
+
+			first.simulateEnded();
+			expect(next).not.toBeNull();
+			await vi.advanceTimersByTimeAsync(20);
+			await next;
+
+			expect(ua.instances).toHaveLength(2);
+			expect(client.isConnected()).toBe(true);
+			await client.startCall();
+			await vi.advanceTimersByTimeAsync(20);
+			expect(client.getState().status).toBe('ringing');
 		});
 
 		it('keeps the UA after a call without disconnectAfterCall', async () => {
@@ -452,6 +501,24 @@ describe('WebRTCClient call lifecycle', () => {
 			await connect();
 			expect(client.isConnected()).toBe(true);
 			expect(lastUA().config.uri).toBe('sip:webrtc-retry@sip.example.com');
+		});
+
+		it('an abort after the UA wait settled leaves the client disconnected', async () => {
+			create();
+			const p = client.connect();
+			const settled = expect(p).rejects.toThrow(/^Failed to connect: Canceled/);
+			while (ua.instances.length === 0) await vi.advanceTimersByTimeAsync(0);
+			// Runs after SipManager's handler resolved the wait, before connect's continuation
+			lastUA().on('registered', () => {
+				queueMicrotask(() => queueMicrotask(() => void client.endCall()));
+			});
+
+			await vi.advanceTimersByTimeAsync(20);
+
+			await settled;
+			expect((client as any).isInitialized).toBe(false);
+			expect(client.isConnected()).toBe(false);
+			expect(client.getState().endInfo?.cause).toBe('Canceled');
 		});
 
 		it('disconnect stops a UA left behind while connecting', async () => {

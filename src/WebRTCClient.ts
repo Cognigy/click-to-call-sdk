@@ -25,7 +25,6 @@ import type {
 	SendDTMFOptions
 } from './types/index.js';
 
-const DEFAULT_CALL_SETUP_TIMEOUT_MS = 10000;
 // JsSIP's own cause names, reused where the SDK ends a call for the same reason
 const CONNECTION_ERROR = 'Connection Error';
 const CANCELED = 'Canceled';
@@ -42,7 +41,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	private callStateStore = new CallStateStore();
 	private isInitialized = false;
 	private isDestroyed = false;
-	private readonly callSetupTimeoutMs: number;
+	private readonly callSetupTimeoutMs: number | undefined;
 	private readonly disconnectAfterCall: boolean;
 	private connectPromise: Promise<void> | null = null;
 	private abortConnect: ((error: Error) => void) | null = null;
@@ -52,7 +51,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 
 	constructor(config: WebRTCClientConfig) {
 		super();
-		this.callSetupTimeoutMs = config.callSetupTimeoutMs ?? DEFAULT_CALL_SETUP_TIMEOUT_MS;
+		this.callSetupTimeoutMs = config.callSetupTimeoutMs;
 		this.disconnectAfterCall = config.disconnectAfterCall ?? false;
 
 		// Validate WebRTC support
@@ -89,10 +88,12 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		store.on(COGNIGY_WEBRTC_EVENTS.STATE_CHANGED, (state: ClientState) => {
 			const callFinished = isTerminal(state.status) && !isTerminal(previousStatus);
 			previousStatus = state.status;
-			this.emit(COGNIGY_WEBRTC_EVENTS.STATE_CHANGED, state);
+			// Before forwarding, so a connect() from a stateChanged listener isn't
+			// aborted by this disconnect and subscribers see the UA already stopped
 			if (callFinished && this.disconnectAfterCall) {
 				this.disconnect().catch(() => undefined);
 			}
+			this.emit(COGNIGY_WEBRTC_EVENTS.STATE_CHANGED, state);
 		});
 		sm.on(COGNIGY_WEBRTC_EVENTS.SESSION_CREATED, (session) => {
 			this.clearSetupTimer();
@@ -135,6 +136,10 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 
 	private startSetupTimer(): void {
 		this.clearSetupTimer();
+		// Opt-in: connect-only consumers must not be failed by a timer
+		if (!this.callSetupTimeoutMs) {
+			return;
+		}
 		this.setupTimer = setTimeout(() => this.onSetupTimeout(), this.callSetupTimeoutMs);
 	}
 
@@ -320,10 +325,13 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 
 	/**
 	 * Connect to the SIP server and start a new call attempt: resets the state
-	 * to `connecting` and arms the setup timer. While a call is in progress it
-	 * returns the in-flight promise. Rejects (and sets state `failed`) on
-	 * config, registration or connection failure, on setup timeout, and when
-	 * endCall()/disconnect() cancel it.
+	 * to `connecting` and arms the setup timer (if `callSetupTimeoutMs` is set).
+	 * While a call is in progress it returns the in-flight promise.
+	 *
+	 * Rejects (`Failed to connect: …`) on config, registration or connection
+	 * failure (state `failed`), when the setup timeout fires (`SETUP_TIMEOUT`),
+	 * and when the attempt is cancelled by endCall() or disconnect() (state
+	 * `ended`, cause `Canceled`).
 	 */
 	connect(): Promise<void> {
 		if (this.isDestroyed) {
@@ -342,11 +350,13 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	private async establishConnection(): Promise<void> {
 		let cause: string = CONNECTION_ERROR;
 		let aborted = false;
+		let abortError: Error | null = null;
 		let removeListeners = () => {};
 		let abort!: (error: Error) => void;
 		const abortion = new Promise<never>((_, reject) => {
 			abort = (error: Error) => {
 				aborted = true;
+				abortError = error;
 				reject(error);
 			};
 		});
@@ -425,6 +435,10 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 					15000
 				)
 			);
+			// An abort can land after the wait settled but before this continuation
+			if (aborted) {
+				throw abortError ?? new Error(CANCELED);
+			}
 			this.isInitialized = true;
 		} catch (error) {
 			// Whoever aborted has already torn down and set the state
@@ -539,6 +553,10 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		}
 	}
 
+	/**
+	 * connect() then startCall(). Rejects like connect(), including when the
+	 * attempt is cancelled via endCall() or the setup timeout fires.
+	 */
 	async connectAndCall(): Promise<void> {
 		await this.connect();
 		await this.startCall();
