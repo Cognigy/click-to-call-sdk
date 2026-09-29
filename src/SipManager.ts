@@ -80,33 +80,34 @@ export class SipManager extends SDKEventEmitter {
 		const ua = this.ua;
 		if (!ua) return;
 		// A stopped UA keeps emitting (e.g. disconnected once its socket closes).
-		// Still forward those until a newer UA exists, but never let them touch
-		// state: it belongs to the current UA (or was reset by stop()).
-		const on = (event: string, handler: (data: any, current: boolean) => void) => {
+		// Only its teardown events are forwarded, and only until a newer UA
+		// exists; they never touch state, which belongs to the current UA.
+		const on = (event: string, handler: (data: any) => void) => {
+			ua.on(event as any, (data: any) => {
+				if (this.ua === ua) handler(data);
+			});
+		};
+		const onTeardown = (event: string, handler: (data: any, current: boolean) => void) => {
 			ua.on(event as any, (data: any) => {
 				const current = this.ua === ua;
-				if (current || this.ua === null) {
-					handler(data, current);
-				}
+				if (current || this.ua === null) handler(data, current);
 			});
 		};
 
-		on('connecting', (_data: any, current) => {
+		on('connecting', () => {
 			console.log('SIP connecting');
-			if (current) this.state.connecting = true;
+			this.state.connecting = true;
 			this.emit(COGNIGY_WEBRTC_EVENTS.CONNECTING);
 		});
 
-		on('connected', (data: any, current) => {
+		on('connected', (data: any) => {
 			console.log('SIP connected:', data);
-			if (current) {
-				this.state.connected = true;
-				this.state.connecting = false;
-			}
+			this.state.connected = true;
+			this.state.connecting = false;
 			this.emit(COGNIGY_WEBRTC_EVENTS.CONNECTED, data);
 		});
 
-		on('disconnected', (data: any, current) => {
+		onTeardown('disconnected', (data: any, current) => {
 			console.log('SIP disconnected:', data);
 			if (current) {
 				this.state.connected = false;
@@ -119,13 +120,13 @@ export class SipManager extends SDKEventEmitter {
 		});
 
 		// Registration events
-		on('registered', (data: any, current) => {
+		on('registered', (data: any) => {
 			console.log('SIP registered:', data);
-			if (current) this.state.registered = true;
+			this.state.registered = true;
 			this.emit(COGNIGY_WEBRTC_EVENTS.REGISTERED, data);
 		});
 
-		on('unregistered', (data: any, current) => {
+		onTeardown('unregistered', (data: any, current) => {
 			console.log('SIP unregistered:', data);
 			if (current) this.state.registered = false;
 			this.emit(COGNIGY_WEBRTC_EVENTS.UNREGISTERED, data);
