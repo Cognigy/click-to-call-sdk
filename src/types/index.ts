@@ -116,15 +116,15 @@ export interface TranscriptMessage {
 	timestamp: number;
 }
 
-/** Immutable snapshot; every change produces a new object. */
+/** Frozen snapshot; every change produces a new object. */
 export interface ClientState {
-	status: CallStatus;
-	muted: boolean;
-	session: CallSession | null;
-	endInfo: CallEndInfo | null;
-	transcript: TranscriptMessage[];
-	remoteStream: MediaStream | null;
-	localStream: MediaStream | null;
+	readonly status: CallStatus;
+	readonly muted: boolean;
+	readonly session: CallSession | null;
+	readonly endInfo: CallEndInfo | null;
+	readonly transcript: readonly TranscriptMessage[];
+	readonly remoteStream: MediaStream | null;
+	readonly localStream: MediaStream | null;
 }
 
 export type SessionStatus = 'init' | 'ringing' | 'answered' | 'failed' | 'ended';
