@@ -76,7 +76,7 @@ describe('ConfigManager', () => {
 			);
 		});
 
-		it('should handle invalid configuration response', async () => {
+		it('resolves configs that fail SIP validation (validation moved to assertCallable)', async () => {
 			const invalidResponse = {
 				ok: true,
 				status: 200,
@@ -84,9 +84,104 @@ describe('ConfigManager', () => {
 			};
 			global.fetch = vi.fn().mockResolvedValue(invalidResponse);
 
-			await expect(configManager.fetchConfig()).rejects.toThrow(
+			await expect(configManager.fetchConfig()).resolves.toEqual({ invalid: 'config' });
+		});
+
+		it('shares one in-flight fetch between concurrent calls', async () => {
+			global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.success);
+
+			const [config1, config2] = await Promise.all([
+				configManager.fetchConfig(),
+				configManager.fetchConfig(),
+			]);
+
+			expect(fetch).toHaveBeenCalledTimes(1);
+			expect(config1).toBe(config2);
+		});
+
+		it('does not cache a failed fetch', async () => {
+			global.fetch = vi
+				.fn()
+				.mockResolvedValueOnce(mockFetchResponses.unauthorized)
+				.mockResolvedValueOnce(mockFetchResponses.success);
+
+			await expect(configManager.fetchConfig()).rejects.toThrow('401 Unauthorized');
+			await expect(configManager.fetchConfig()).resolves.toEqual(mockEndpointConfig);
+			expect(fetch).toHaveBeenCalledTimes(2);
+		});
+
+		it('generates a userId when none was provided', async () => {
+			const anonymous = new ConfigManager(mockEndpointUrl);
+			global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.success);
+
+			await anonymous.fetchConfig();
+
+			expect(anonymous.getSipCredentials().userId).toMatch(/^webrtc-sdk-test-webrtc-endpoint-/);
+		});
+	});
+
+	describe('assertCallable', () => {
+		it('throws when the loaded config fails SIP validation', async () => {
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: () => Promise.resolve({ invalid: 'config' }),
+			});
+			await configManager.fetchConfig();
+
+			expect(() => configManager.assertCallable()).toThrow(
 				'Invalid endpoint configuration received'
 			);
+		});
+
+		it('throws when no config is loaded', () => {
+			expect(() => configManager.assertCallable()).toThrow('Invalid endpoint configuration received');
+		});
+
+		it('does not throw for a valid config', async () => {
+			global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.success);
+			await configManager.fetchConfig();
+
+			expect(() => configManager.assertCallable()).not.toThrow();
+		});
+	});
+
+	describe('setUserId', () => {
+		it('overrides a constructor-provided userId', async () => {
+			global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.success);
+			await configManager.fetchConfig();
+
+			configManager.setUserId('webrtc-x');
+
+			expect(configManager.getSipCredentials().userId).toBe('webrtc-x');
+			expect(configManager.getSipCredentials().fullUsername).toBe('webrtc-x@sip.example.com');
+		});
+
+		it('overrides a generated userId and survives later fetches', async () => {
+			const anonymous = new ConfigManager(mockEndpointUrl);
+			global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.success);
+			await anonymous.fetchConfig();
+
+			anonymous.setUserId('webrtc-x');
+			anonymous.clearConfig();
+			await anonymous.fetchConfig();
+
+			expect(anonymous.getSipCredentials().userId).toBe('webrtc-x');
+		});
+
+		it('is not overwritten by a fetch that finishes afterwards', async () => {
+			const anonymous = new ConfigManager(mockEndpointUrl);
+			global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.success);
+
+			const pending = anonymous.fetchConfig();
+			anonymous.setUserId('webrtc-x');
+			await pending;
+
+			expect(anonymous.getSipCredentials().userId).toBe('webrtc-x');
+		});
+
+		it('rejects an empty id', () => {
+			expect(() => configManager.setUserId('')).toThrow('userId must be a non-empty string');
 		});
 	});
 
