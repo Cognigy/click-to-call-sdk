@@ -356,7 +356,11 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	 * Check if connected to SIP server
 	 */
 	isConnected(): boolean {
-		return this.isInitialized && this.sipManager.isConnected();
+		return (
+			this.isInitialized &&
+			this.sipManager.isConnected() &&
+			(this.sipManager.isRegistered() || !this.sipManager.needsRegistration())
+		);
 	}
 
 	/**
