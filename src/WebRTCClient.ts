@@ -9,6 +9,7 @@ import { SessionManager } from './SessionManager.js';
 import { AudioManager } from './AudioManager.js';
 import { SDKEventEmitter, COGNIGY_WEBRTC_EVENTS } from './utils/events.js';
 import { isWebRTCSupported, withTimeout } from './utils/helpers.js';
+import type { ExtendedRTCSession } from './types/internal.js';
 import type {
 	WebRTCClient as IWebRTCClient,
 	WebRTCClientConfig,
@@ -37,7 +38,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		// Initialize managers
 		this.configManager = new ConfigManager(config.endpointUrl, config?.userId || undefined);
 		this.sipManager = new SipManager();
-		this.sessionManager = new SessionManager(config.pcConfig);
+		this.sessionManager = new SessionManager(config.pcConfig, (rtc) => this.sessionManager.createSession(rtc));
 		this.audioManager = new AudioManager();
 
 		// Set audio manager on session manager for direct audio handling
@@ -89,6 +90,10 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		});
 
 		// Session Manager events
+		this.sessionManager.on(COGNIGY_WEBRTC_EVENTS.SESSION_CREATED, (session) => {
+			this.emit(COGNIGY_WEBRTC_EVENTS.SESSION_CREATED, session);
+		});
+
 		this.sessionManager.on(COGNIGY_WEBRTC_EVENTS.RINGING, (session) => {
 			this.emit(COGNIGY_WEBRTC_EVENTS.RINGING, session);
 		});
@@ -392,6 +397,13 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	 */
 	getCurrentSession(): CallSession | null {
 		return this.sessionManager.getActiveSession();
+	}
+
+	/**
+	 * Advanced/unstable: underlying JsSIP session.
+	 */
+	getRawSession(): ExtendedRTCSession | null {
+		return this.sessionManager.getRawSession();
 	}
 
 	/**

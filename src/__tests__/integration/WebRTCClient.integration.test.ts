@@ -207,6 +207,43 @@ describe('WebRTCClient Integration Tests', () => {
 			expect(client.getCurrentSession()).toBeNull();
 		});
 
+		it('emits sessionCreated on the client synchronously on newRTCSession', async () => {
+			const order: string[] = [];
+			client.on('sessionCreated', (session) => order.push(`created:${session.status}`));
+			client.on('ringing', () => order.push('ringing'));
+
+			await client.startCall();
+			await new Promise(resolve => setTimeout(resolve, 20));
+
+			expect(order).toEqual(['created:init', 'ringing']);
+		});
+
+		it('exposes the underlying JsSIP session via getRawSession', async () => {
+			expect(client.getRawSession()).toBeNull();
+
+			await client.startCall();
+			await new Promise(resolve => setTimeout(resolve, 20));
+
+			expect(client.getRawSession()).toBe(mockUA.getLastSession());
+		});
+
+		it('wires REFER-created sessions into the session manager once', async () => {
+			await client.startCall();
+			await new Promise(resolve => setTimeout(resolve, 20));
+			const created = vi.fn();
+			client.on('sessionCreated', created);
+
+			const data = mockUA.getLastSession().simulateRefer(true);
+			const { MockRTCSession } = await import('../mocks/jssip.js');
+			const referred = new MockRTCSession('outgoing');
+			data.accept.mock.calls[0][0](referred);
+			// JsSIP then announces the same session on the UA
+			mockUA.emit('newRTCSession', { session: referred });
+
+			expect(created).toHaveBeenCalledTimes(1);
+			expect(referred.data.replaces).toBe(true);
+		});
+
 		it('should dial the bare endpointId and thread identity headers through WebRTCClient', async () => {
 			await client.destroy();
 			const runtimeConfig = {
