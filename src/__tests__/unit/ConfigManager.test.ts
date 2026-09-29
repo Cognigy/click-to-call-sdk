@@ -396,6 +396,47 @@ describe('ConfigManager', () => {
 			configManager.clearConfig();
 			expect(configManager.getConfig()).toBeNull();
 		});
+
+		const deferredFetch = () => {
+			const pending: Array<(body: unknown) => void> = [];
+			global.fetch = vi.fn(
+				() =>
+					new Promise((resolve) => {
+						pending.push((body) => resolve({ ok: true, status: 200, json: () => Promise.resolve(body) }));
+					})
+			) as any;
+			return pending;
+		};
+
+		it('does not let a request in flight during clearConfig repopulate the config or userId', async () => {
+			const anonymous = new ConfigManager(mockEndpointUrl);
+			const pending = deferredFetch();
+
+			const request = anonymous.fetchConfig();
+			anonymous.clearConfig();
+			pending[0](mockEndpointConfig);
+			await request.catch(() => undefined);
+
+			expect(anonymous.getConfig()).toBeNull();
+			expect((anonymous as any).userId).toBe('');
+		});
+
+		it('does not let an older response overwrite a newer one', async () => {
+			const pending = deferredFetch();
+			const older = { ...mockEndpointConfig, projectId: 'older' };
+			const newer = { ...mockEndpointConfig, projectId: 'newer' };
+
+			const first = configManager.fetchConfig();
+			configManager.clearConfig();
+			const second = configManager.fetchConfig();
+			pending[1](newer);
+			await second;
+			pending[0](older);
+			await first.catch(() => undefined);
+
+			expect(configManager.getConfig()?.projectId).toBe('newer');
+			await expect(configManager.fetchConfig()).resolves.toMatchObject({ projectId: 'newer' });
+		});
 	});
 
 	describe('isConfigValid', () => {
