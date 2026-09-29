@@ -51,8 +51,9 @@ export default defineConfig(({ mode }) => {
 			...(isProd ? [
 				compression({ algorithm: "gzip" }),
 				compression({ algorithm: "brotliCompress", ext: ".br" }),
-				// Only in the first build; the UMD pass would overwrite its report
-				...(!isUmd ? [analyzer()] : []),
+				// Only in the first build; the UMD pass would overwrite its report.
+				// Static: the default server mode blocks the build outside CI. Kept out of dist/ so it isn't published.
+				...(!isUmd ? [analyzer({ analyzerMode: 'static', openAnalyzer: false, fileName: resolve(__dirname, 'reports/bundle-stats.html') })] : []),
 			] : []),
 		],
 		build: {
