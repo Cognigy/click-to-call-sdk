@@ -13,6 +13,7 @@ import type {
 	WebRTCClient as IWebRTCClient,
 	WebRTCClientConfig,
 	CallSession,
+	EndpointConfig,
 	EventName,
 	EventCallback,
 	SendDTMFOptions
@@ -143,6 +144,29 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	}
 
 	/**
+	 * Fetch the endpoint configuration (cached; concurrent calls share one request).
+	 * Does not validate SIP fields, so widgets can render configs connect() rejects.
+	 */
+	loadConfig(): Promise<EndpointConfig> {
+		return this.configManager.fetchConfig();
+	}
+
+	getConfig(): EndpointConfig | null {
+		return this.configManager.getConfig();
+	}
+
+	/**
+	 * Set the SIP user id. The UA is created from it, so it is locked once the
+	 * UA exists (connect in progress or completed, until disconnect).
+	 */
+	setUserId(id: string): void {
+		if (this.sipManager.getUserAgent()) {
+			throw new Error('Cannot change userId while connected');
+		}
+		this.configManager.setUserId(id);
+	}
+
+	/**
 	 * Connect to the SIP server
 	 */
 	async connect(): Promise<void> {
@@ -151,8 +175,8 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		}
 
 		try {
-			// Fetch configuration
-			const _config = await this.configManager.fetchConfig();
+			await this.loadConfig();
+			this.configManager.assertCallable();
 			if (!this.configManager.isActive()) {
 				throw new Error('WebRTC widget is not active in the configuration');
 			}

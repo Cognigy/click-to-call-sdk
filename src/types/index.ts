@@ -16,14 +16,12 @@ export interface EndpointConfig {
 		active: boolean;
 		version?: string;
 		sipConnectivityInfo: SipConnectivityInfo;
-		webrtcWidgetConfig: {
-			active: boolean;
-			label?: string;
-		};
+		webrtcWidgetConfig: WebrtcWidgetConfig;
 		/** Absent from older endpoint configs. */
 		endpointId?: string;
 	};
 	settings?: {
+		transcription?: { enabled?: boolean };
 		privacyNotice?: {
 			enabled: boolean;
 			text: string;
@@ -32,6 +30,28 @@ export interface EndpointConfig {
 			urlText: string;
 			url: string;
 		};
+	};
+}
+
+export interface WebrtcWidgetConfig {
+	active: boolean;
+	label?: string;
+	tagline?: string;
+	theme?: string;
+	avatarLogoUrl?: string;
+	transcription?: {
+		enabled?: boolean;
+		backgroundMode?: 'transparent' | 'custom';
+		backgroundColor?: string;
+	};
+	basePanelBackgroundColor?: string;
+	demoPage?: {
+		background?: {
+			color?: string;
+			mode?: 'color' | 'imageUrl';
+			imageUrl?: string;
+		};
+		position?: 'centered' | 'bottomRight';
 	};
 }
 
@@ -124,6 +144,13 @@ export interface WebRTCClient {
 	// Event handling
 	on<T extends EventName>(event: T, callback: EventCallback<T>): this;
 	off<T extends EventName>(event: T, callback: EventCallback<T>): this;
+
+	// Config
+	/** Fetch the endpoint config once and cache it; concurrent calls share one request. */
+	loadConfig(): Promise<EndpointConfig>;
+	getConfig(): EndpointConfig | null;
+	/** Override the SIP user id. Throws once connect() has started. */
+	setUserId(id: string): void;
 
 	// State getters
 	isConnected(): boolean;
