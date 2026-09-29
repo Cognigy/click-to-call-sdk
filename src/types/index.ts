@@ -4,6 +4,8 @@
 
 import type { ExtendedRTCSession } from './internal.js';
 
+export type { ExtendedRTCSession } from './internal.js';
+
 // Configuration types
 export interface EndpointConfig {
 	organisationId: string;
@@ -87,6 +89,26 @@ export interface CallSession {
 	remoteHold: boolean;
 }
 
+export type CallStatus = 'idle' | 'connecting' | 'ringing' | 'answered' | 'ended' | 'failed';
+
+export interface TranscriptMessage {
+	id: string;
+	text: string;
+	originator: 'bot' | 'user';
+	timestamp: number;
+}
+
+/** Immutable snapshot; every change produces a new object. */
+export interface ClientState {
+	status: CallStatus;
+	muted: boolean;
+	session: CallSession | null;
+	endInfo: CallEndInfo | null;
+	transcript: TranscriptMessage[];
+	remoteStream: MediaStream | null;
+	localStream: MediaStream | null;
+}
+
 export type SessionStatus = 'init' | 'ringing' | 'answered' | 'failed' | 'ended';
 
 export interface CallEndInfo {
@@ -138,6 +160,7 @@ export interface WebRTCClientEvents {
 	'error': (error: Error) => void;
 	'captureAudio': (stream: MediaStream) => void;
 	'transcription': (data: any) => void;
+	'stateChanged': (state: ClientState) => void;
 }
 
 export type EventName = keyof WebRTCClientEvents;
@@ -171,6 +194,10 @@ export interface WebRTCClient {
 	// State getters
 	isConnected(): boolean;
 	getCurrentSession(): CallSession | null;
+	/** Current immutable state snapshot. */
+	getState(): ClientState;
+	/** Listen for state changes (does not fire immediately). Returns an unsubscribe function. */
+	subscribe(listener: (state: ClientState) => void): () => void;
 	/** Advanced/unstable: underlying JsSIP session. */
 	getRawSession(): ExtendedRTCSession | null;
 

@@ -7,6 +7,7 @@ import { ConfigManager } from './ConfigManager.js';
 import { SipManager } from './SipManager.js';
 import { SessionManager } from './SessionManager.js';
 import { AudioManager } from './AudioManager.js';
+import { CallStateStore } from './CallStateStore.js';
 import { SDKEventEmitter, COGNIGY_WEBRTC_EVENTS } from './utils/events.js';
 import { isWebRTCSupported, withTimeout } from './utils/helpers.js';
 import type { ExtendedRTCSession } from './types/internal.js';
@@ -14,6 +15,7 @@ import type {
 	WebRTCClient as IWebRTCClient,
 	WebRTCClientConfig,
 	CallSession,
+	ClientState,
 	EndpointConfig,
 	EventName,
 	EventCallback,
@@ -25,6 +27,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	private sipManager: SipManager;
 	private sessionManager: SessionManager;
 	private audioManager: AudioManager;
+	private callStateStore = new CallStateStore();
 	private isInitialized = false;
 	private isDestroyed = false;
 
@@ -49,6 +52,31 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		}
 
 		this.setupEventHandlers();
+		this.setupStateHandlers();
+	}
+
+	/**
+	 * Feed the state store from session events. Registered on the internal
+	 * managers, independent of the public forwarding above.
+	 */
+	private setupStateHandlers(): void {
+		const store = this.callStateStore;
+		const sm = this.sessionManager;
+
+		store.on(COGNIGY_WEBRTC_EVENTS.STATE_CHANGED, (state: ClientState) => {
+			this.emit(COGNIGY_WEBRTC_EVENTS.STATE_CHANGED, state);
+		});
+		sm.on(COGNIGY_WEBRTC_EVENTS.SESSION_CREATED, (session) => store.update({ session }));
+		sm.on(COGNIGY_WEBRTC_EVENTS.RINGING, (session) => store.update({ status: 'ringing', session }));
+		sm.on(COGNIGY_WEBRTC_EVENTS.ANSWERED, (session) => store.update({ status: 'answered', session }));
+		sm.on(COGNIGY_WEBRTC_EVENTS.ENDED, (session, endInfo) => store.update({ status: 'ended', session, endInfo }));
+		sm.on(COGNIGY_WEBRTC_EVENTS.FAILED, (session, endInfo) => store.update({ status: 'failed', session, endInfo }));
+		sm.on(COGNIGY_WEBRTC_EVENTS.MUTED, () => store.update({ muted: true }));
+		sm.on(COGNIGY_WEBRTC_EVENTS.UNMUTED, () => store.update({ muted: false }));
+		sm.on(COGNIGY_WEBRTC_EVENTS.TRANSCRIPTION, (info) => store.addTranscription(info));
+		sm.on(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, (remoteStream, localStream) =>
+			store.update({ remoteStream, localStream })
+		);
 	}
 
 	/**
@@ -182,6 +210,8 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		if (this.isDestroyed) {
 			throw new Error('Client has been destroyed');
 		}
+
+		this.callStateStore.startCall();
 
 		try {
 			await this.loadConfig();
@@ -397,6 +427,17 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	 */
 	getCurrentSession(): CallSession | null {
 		return this.sessionManager.getActiveSession();
+	}
+
+	getState(): ClientState {
+		return this.callStateStore.getState();
+	}
+
+	subscribe(listener: (state: ClientState) => void): () => void {
+		this.on(COGNIGY_WEBRTC_EVENTS.STATE_CHANGED, listener);
+		return () => {
+			this.off(COGNIGY_WEBRTC_EVENTS.STATE_CHANGED, listener);
+		};
 	}
 
 	/**
