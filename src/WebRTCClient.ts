@@ -112,6 +112,13 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		sm.on(COGNIGY_WEBRTC_EVENTS.FAILED, (session, endInfo) => {
 			if (isCurrent(session)) store.update({ status: 'failed', session, endInfo, remoteStream: null, localStream: null });
 		});
+		// Mute/hold changes only arrive here. Updates that change the session's
+		// status are left to the lifecycle events, which also set `status`.
+		sm.on(COGNIGY_WEBRTC_EVENTS.SESSION_UPDATED, (session) => {
+			if (isCurrent(session) && session.status === store.getState().session?.status) {
+				store.update({ session });
+			}
+		});
 		sm.on(COGNIGY_WEBRTC_EVENTS.MUTED, (session) => {
 			if (isCurrent(session)) store.update({ muted: true });
 		});
