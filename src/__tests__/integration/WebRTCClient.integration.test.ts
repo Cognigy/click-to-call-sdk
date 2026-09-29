@@ -585,6 +585,27 @@ describe('WebRTCClient Integration Tests', () => {
 
 			expect(handler).toHaveBeenCalledWith({ code: 1006, reason: 'gone' });
 		});
+
+		it('isConnected is true for a connected runtime endpoint', async () => {
+			const runtimeConfig = {
+				...mockEndpointConfig,
+				endpointSettings: {
+					...mockEndpointConfig.endpointSettings,
+					endpointId: 'endpoint-1',
+					sipConnectivityInfo: { wsUri: 'wss://sip.example.com:8443' },
+				},
+			};
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: () => Promise.resolve(runtimeConfig),
+			});
+			client = new WebRTCClient(mockWebRTCClientConfig);
+
+			await client.connect();
+
+			expect(client.isConnected()).toBe(true);
+		});
 	});
 
 	describe('Cleanup and Resource Management', () => {
