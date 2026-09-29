@@ -23,6 +23,8 @@ export type {
 	EventName,
 	EventCallback,
 	WebRTCClientEvents,
+	RegistrationFailedInfo,
+	DisconnectedInfo,
 	SendDTMFOptions,
 } from './types/index.js';
 

@@ -63,8 +63,8 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 			this.emit(COGNIGY_WEBRTC_EVENTS.CONNECTED);
 		});
 
-		this.sipManager.on(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, () => {
-			this.emit(COGNIGY_WEBRTC_EVENTS.DISCONNECTED);
+		this.sipManager.on(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, (info) => {
+			this.emit(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, info);
 		});
 
 		this.sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTERED, () => {
@@ -73,6 +73,10 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 
 		this.sipManager.on(COGNIGY_WEBRTC_EVENTS.UNREGISTERED, () => {
 			this.emit(COGNIGY_WEBRTC_EVENTS.UNREGISTERED);
+		});
+
+		this.sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, (info) => {
+			this.emit(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, info);
 		});
 
 		this.sipManager.on('newRTCSession', (rtcSession) => {
