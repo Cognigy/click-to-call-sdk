@@ -76,7 +76,7 @@ export interface WebRTCClientConfig {
 	captureAudio?: boolean;
 	/**
 	 * Fail the call if no SIP session exists this long after connect()
-	 * (or startCall() on a connected client). Default 10000.
+	 * (or startCall() on a connected client). Unset or 0: no timer.
 	 */
 	callSetupTimeoutMs?: number;
 	/** Stop the SIP UA once a call ends or fails; the next connect() starts a new one. Default false. */

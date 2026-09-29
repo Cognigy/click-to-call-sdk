@@ -94,8 +94,7 @@ describe('Error Handling and Edge Cases', () => {
 		it('should handle network timeout during config fetch', async () => {
 			vi.stubGlobal('fetch', vi.fn().mockImplementation(() => mockFetchResponses.timeout()));
 
-			// The default 10 s setup timeout would otherwise fire first
-			const client = new WebRTCClient({ ...mockWebRTCClientConfig, callSetupTimeoutMs: 15000 });
+			const client = new WebRTCClient(mockWebRTCClientConfig);
 
 			await expect(client.connect()).rejects.toThrow(
 				'Configuration fetch failed: Operation timed out after 10000ms'
