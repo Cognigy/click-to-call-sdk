@@ -45,7 +45,7 @@ export class SipManager extends SDKEventEmitter {
 					]
 				: [];
 
-		console.log('Creating SIP client with config:', { client, settings }, settings.pcConfig);
+		console.log('Creating SIP client with config:', { client: { ...client, password: client.password ? '***' : undefined }, settings });
 
 		const socket = new WebSocketInterface(settings.wsUri);
 
