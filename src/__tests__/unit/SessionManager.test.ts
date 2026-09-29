@@ -88,4 +88,318 @@ describe('SessionManager', () => {
 			expect(dtmfSpy).not.toHaveBeenCalled();
 		});
 	});
+	describe('current session', () => {
+		let ringing: MockRTCSession;
+		let manager: SessionManager;
+
+		beforeEach(() => {
+			manager = new SessionManager();
+			ringing = new MockRTCSession();
+			manager.createSession(ringing as any);
+			ringing.simulateProgress();
+		});
+
+		afterEach(() => {
+			manager.destroy();
+		});
+
+		it('terminate works while ringing (before accepted)', () => {
+			manager.terminate();
+
+			expect(ringing.terminate).toHaveBeenCalledWith({
+				status_code: 480,
+				reason_phrase: 'Ended by user',
+			});
+		});
+
+		it('terminate throws when no session is live', () => {
+			ringing.simulateFailed();
+
+			expect(() => manager.terminate()).toThrow('No active session to terminate');
+		});
+
+		it('mute before answer throws Session not established', () => {
+			rtcSession.isEstablished.mockReturnValue(false);
+
+			expect(() => sessionManager.mute()).toThrow('Session not established');
+			expect(rtcSession.mute).not.toHaveBeenCalled();
+		});
+
+		it('prefers the active session over a newer ringing one', () => {
+			// beforeEach's outer session is active; a newer session is ringing
+			const other = new MockRTCSession();
+			sessionManager.createSession(other as any);
+
+			sessionManager.terminate();
+
+			expect(rtcSession.terminate).toHaveBeenCalled();
+			expect(other.terminate).not.toHaveBeenCalled();
+		});
+
+		it('falls back to the most recent live session and skips ended ones', () => {
+			const older = new MockRTCSession();
+			const newer = new MockRTCSession();
+			manager.createSession(older as any);
+			manager.createSession(newer as any);
+			newer.simulateEnded();
+
+			manager.terminate();
+
+			expect(older.terminate).toHaveBeenCalled();
+			expect(newer.terminate).not.toHaveBeenCalled();
+			expect(ringing.terminate).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('getRawSession', () => {
+		it('returns the current session and null after it ends', () => {
+			expect(sessionManager.getRawSession()).toBe(rtcSession);
+
+			rtcSession.simulateEnded();
+
+			expect(sessionManager.getRawSession()).toBeNull();
+		});
+
+		it('returns null when there is no session', () => {
+			const emptyManager = new SessionManager();
+
+			expect(emptyManager.getRawSession()).toBeNull();
+
+			emptyManager.destroy();
+		});
+	});
+
+	describe('createSession', () => {
+		it('does not create or announce the same rtc session twice', () => {
+			const createdSpy = vi.fn();
+			sessionManager.on(COGNIGY_WEBRTC_EVENTS.SESSION_CREATED, createdSpy);
+			const other = new MockRTCSession();
+
+			const first = sessionManager.createSession(other as any);
+			const second = sessionManager.createSession(other as any);
+
+			expect(second).toBe(first);
+			expect(createdSpy).toHaveBeenCalledTimes(1);
+			expect(sessionManager.getAllSessions()).toHaveLength(2);
+		});
+	});
+
+	describe('early ICE', () => {
+		it('does not call ready() for host candidates', () => {
+			const evt = rtcSession.simulateIceCandidate('host');
+
+			expect(evt.ready).not.toHaveBeenCalled();
+		});
+
+		it('calls ready() on the first srflx candidate', () => {
+			const host = rtcSession.simulateIceCandidate('host');
+			const srflx = rtcSession.simulateIceCandidate('srflx');
+			const later = rtcSession.simulateIceCandidate('srflx');
+
+			expect(host.ready).not.toHaveBeenCalled();
+			expect(srflx.ready).toHaveBeenCalledTimes(1);
+			expect(later.ready).not.toHaveBeenCalled();
+		});
+
+		it('calls ready() on the first relay candidate', () => {
+			const evt = rtcSession.simulateIceCandidate('relay');
+
+			expect(evt.ready).toHaveBeenCalledTimes(1);
+		});
+
+		it('counts candidates per session', () => {
+			const other = new MockRTCSession();
+			sessionManager.createSession(other as any);
+
+			rtcSession.simulateIceCandidate('srflx');
+			const evt = other.simulateIceCandidate('host');
+
+			expect(evt.ready).not.toHaveBeenCalled();
+		});
+
+		it('ignores malformed candidates without throwing', () => {
+			const ready = vi.fn();
+
+			expect(() => rtcSession.emit('icecandidate', { candidate: null, ready })).not.toThrow();
+			expect(() => rtcSession.emit('icecandidate', { candidate: {}, ready })).not.toThrow();
+			expect(() =>
+				rtcSession.emit('icecandidate', { candidate: { candidate: 'short' }, ready }),
+			).not.toThrow();
+			expect(ready).not.toHaveBeenCalled();
+		});
+	});
+
+	describe('REFER and replaces', () => {
+		it('accepts REFER and hands the new session to createSession', () => {
+			const onNewSession = vi.fn();
+			const pcConfig = { iceServers: [{ urls: 'stun:example.org' }] };
+			const manager = new SessionManager(pcConfig, onNewSession);
+			const rtc = new MockRTCSession();
+			manager.createSession(rtc as any);
+
+			const data = rtc.simulateRefer(true);
+
+			expect(data.accept).toHaveBeenCalledTimes(1);
+			const [initCallback, options] = data.accept.mock.calls[0];
+			expect(options).toEqual({
+				mediaConstraints: { audio: true, video: false },
+				pcConfig,
+			});
+
+			const referred = new MockRTCSession();
+			initCallback(referred);
+
+			expect(referred.data.replaces).toBe(true);
+			expect(onNewSession).toHaveBeenCalledWith(referred);
+			manager.destroy();
+		});
+
+		it('does not flag a REFER without a replaces header', () => {
+			const onNewSession = vi.fn();
+			const manager = new SessionManager(undefined, onNewSession);
+			const rtc = new MockRTCSession();
+			manager.createSession(rtc as any);
+
+			const data = rtc.simulateRefer(false);
+			const referred = new MockRTCSession();
+			data.accept.mock.calls[0][0](referred);
+
+			expect(referred.data.replaces).toBeUndefined();
+			expect(onNewSession).toHaveBeenCalledWith(referred);
+			manager.destroy();
+		});
+
+		it('still accepts a REFER without refer_to', () => {
+			const onNewSession = vi.fn();
+			const manager = new SessionManager(undefined, onNewSession);
+			const rtc = new MockRTCSession();
+			manager.createSession(rtc as any);
+			const data = { request: {}, accept: vi.fn(), reject: vi.fn() };
+			rtc.emit('refer', data);
+
+			const referred = new MockRTCSession();
+			expect(() => data.accept.mock.calls[0][0](referred)).not.toThrow();
+
+			expect(referred.data.replaces).toBeUndefined();
+			expect(onNewSession).toHaveBeenCalledWith(referred);
+			manager.destroy();
+		});
+
+		it('auto-answers a replaces session that is not established', () => {
+			const onNewSession = vi.fn();
+			const pcConfig = { iceServers: [] };
+			const manager = new SessionManager(pcConfig, onNewSession);
+			const rtc = new MockRTCSession();
+			manager.createSession(rtc as any);
+
+			const data = rtc.simulateReplaces();
+			const replacing = new MockRTCSession('incoming');
+			replacing.isEstablished.mockReturnValue(false);
+			data.accept.mock.calls[0][0](replacing);
+
+			expect(replacing.data.replaces).toBe(true);
+			expect(onNewSession).toHaveBeenCalledWith(replacing);
+			expect(replacing.answer).toHaveBeenCalledWith({
+				mediaConstraints: { audio: true, video: false },
+				pcConfig,
+			});
+			manager.destroy();
+		});
+
+		it('does not answer a replaces session that is already established', () => {
+			const manager = new SessionManager(undefined, vi.fn());
+			const rtc = new MockRTCSession();
+			manager.createSession(rtc as any);
+
+			const data = rtc.simulateReplaces();
+			const replacing = new MockRTCSession('incoming');
+			data.accept.mock.calls[0][0](replacing);
+
+			expect(replacing.answer).not.toHaveBeenCalled();
+			manager.destroy();
+		});
+	});
+
+	describe('streamsChanged', () => {
+		const audioTrack = (id: string) => ({ id, kind: 'audio' });
+		const videoTrack = (id: string) => ({ id, kind: 'video' });
+
+		class FakeStream {
+			constructor(public tracks: any[] = []) {}
+			addTrack = vi.fn();
+		}
+
+		const OriginalMediaStream = globalThis.MediaStream;
+
+		beforeEach(() => {
+			(globalThis as any).MediaStream = FakeStream;
+		});
+
+		afterEach(() => {
+			(globalThis as any).MediaStream = OriginalMediaStream;
+		});
+
+		it('emits remote and local audio streams on accepted', () => {
+			const spy = vi.fn();
+			sessionManager.on(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, spy);
+			rtcSession.simulatePeerConnection();
+			const pc = rtcSession._connection;
+			pc.getReceivers.mockReturnValue([{ track: audioTrack('r1') }, { track: videoTrack('rv') }]);
+			pc.getSenders.mockReturnValue([{ track: audioTrack('l1') }, { track: null }]);
+
+			rtcSession.simulateAccepted();
+
+			expect(spy).toHaveBeenCalledTimes(1);
+			const [remote, local] = spy.mock.calls[0];
+			expect(remote.tracks).toEqual([audioTrack('r1')]);
+			expect(local.tracks).toEqual([audioTrack('l1')]);
+		});
+
+		it('emits null for a side without audio tracks', () => {
+			const spy = vi.fn();
+			sessionManager.on(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, spy);
+			rtcSession.simulatePeerConnection();
+			rtcSession._connection.getSenders.mockReturnValue([{ track: audioTrack('l1') }]);
+
+			rtcSession.simulateAccepted();
+
+			const [remote, local] = spy.mock.calls[0];
+			expect(remote).toBeNull();
+			expect(local.tracks).toEqual([audioTrack('l1')]);
+		});
+
+		it('does not emit when neither side has audio tracks', () => {
+			const spy = vi.fn();
+			sessionManager.on(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, spy);
+			rtcSession.simulatePeerConnection();
+
+			rtcSession.simulateAccepted();
+			rtcSession._connection.dispatch('negotiationneeded');
+
+			expect(spy).not.toHaveBeenCalled();
+		});
+
+		it('emits on peer-connection track and negotiationneeded', () => {
+			const spy = vi.fn();
+			sessionManager.on(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, spy);
+			rtcSession.simulatePeerConnection();
+			const pc = rtcSession._connection;
+			pc.getReceivers.mockReturnValue([{ track: audioTrack('r1') }]);
+
+			pc.dispatch('track', { track: audioTrack('r1') });
+			pc.dispatch('negotiationneeded');
+
+			expect(spy).toHaveBeenCalledTimes(2);
+		});
+
+		it('still forwards remote audio to the audio manager on track', () => {
+			const audioManager = { handleRemoteStream: vi.fn() };
+			sessionManager.setAudioManager(audioManager);
+			rtcSession.simulatePeerConnection();
+
+			rtcSession._connection.dispatch('track', { track: audioTrack('r1') });
+
+			expect(audioManager.handleRemoteStream).toHaveBeenCalledTimes(1);
+		});
+	});
 });
