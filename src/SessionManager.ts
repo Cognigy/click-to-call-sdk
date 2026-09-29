@@ -16,6 +16,8 @@ import { randomId } from './utils/helpers.js';
 
 export class SessionManager extends SDKEventEmitter {
 	private sessions: Map<string, SessionState> = new Map();
+	/** Sessions whose last streamsChanged carried at least one stream. */
+	private sessionsWithStreams = new Set<string>();
 	private activeSessionId: string | null = null;
 	private audioManager?: any;
 	private readonly pcConfig?: RTCConfiguration;
@@ -105,7 +107,7 @@ export class SessionManager extends SDKEventEmitter {
 			this.updateSession(sessionState);
 			this.emit(COGNIGY_WEBRTC_EVENTS.ANSWERED, this.getPublicSession(sessionState));
 			if (rtcSession._connection) {
-				this.emitStreams(rtcSession._connection);
+				this.emitStreams(sessionState, rtcSession._connection);
 			}
 		});
 
@@ -254,7 +256,7 @@ export class SessionManager extends SDKEventEmitter {
 		const { rtcSession } = sessionState;
 
 		const attachPCListeners = (pc: RTCPeerConnection) => {
-			pc.addEventListener('negotiationneeded', () => this.emitStreams(pc));
+			pc.addEventListener('negotiationneeded', () => this.emitStreams(sessionState, pc));
 			pc.addEventListener('track', (event: any) => {
 				const track = event.track;
 
@@ -267,7 +269,7 @@ export class SessionManager extends SDKEventEmitter {
 						this.audioManager.handleRemoteStream(stream);
 					}
 				}
-				this.emitStreams(pc);
+				this.emitStreams(sessionState, pc);
 			});
 		};
 
@@ -282,9 +284,10 @@ export class SessionManager extends SDKEventEmitter {
 	}
 
 	/**
-	 * Emit the peer connection's current remote/local audio streams (internal event).
+	 * Emit the peer connection's current remote/local audio streams (internal
+	 * event). A null pair is emitted once when the last audio track goes away.
 	 */
-	private emitStreams(pc: RTCPeerConnection): void {
+	private emitStreams(sessionState: SessionState, pc: RTCPeerConnection): void {
 		const audioTracks = (items: Array<RTCRtpReceiver | RTCRtpSender>): MediaStreamTrack[] =>
 			items
 				.map((item) => item.track)
@@ -296,8 +299,11 @@ export class SessionManager extends SDKEventEmitter {
 		const local = localTracks.length > 0 ? new MediaStream(localTracks) : null;
 
 		if (remote || local) {
-			this.emit(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, remote, local);
+			this.sessionsWithStreams.add(sessionState.id);
+		} else if (!this.sessionsWithStreams.delete(sessionState.id)) {
+			return;
 		}
+		this.emit(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, remote, local);
 	}
 
 	/**
@@ -549,6 +555,7 @@ export class SessionManager extends SDKEventEmitter {
 	 */
 	private removeSession(sessionId: string): void {
 		this.sessions.delete(sessionId);
+		this.sessionsWithStreams.delete(sessionId);
 		if (this.activeSessionId === sessionId) {
 			this.activeSessionId = null;
 		}
@@ -568,6 +575,7 @@ export class SessionManager extends SDKEventEmitter {
 		}
 
 		this.sessions.clear();
+		this.sessionsWithStreams.clear();
 		this.activeSessionId = null;
 	}
 
