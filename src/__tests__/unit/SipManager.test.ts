@@ -406,6 +406,47 @@ describe('SipManager', () => {
 			);
 		});
 
+		it('emits registrationFailed with only cause and response status', () => {
+			sipManager.initialize(mockClientConfig, mockSettings);
+			mockUA = sipManager.getUserAgent() as unknown as MockUA;
+			const spy = vi.fn();
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, spy);
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.ERROR, () => {});
+
+			mockUA.emit('registrationFailed', {
+				cause: 'Rejected',
+				response: { status_code: 403, reason_phrase: 'Forbidden', headers: {}, data: 'raw' },
+			});
+
+			expect(spy).toHaveBeenCalledWith({
+				cause: 'Rejected',
+				response: { status_code: 403, reason_phrase: 'Forbidden' },
+			});
+		});
+
+		it('emits registrationFailed without response when JsSIP gives none', () => {
+			sipManager.initialize(mockClientConfig, mockSettings);
+			mockUA = sipManager.getUserAgent() as unknown as MockUA;
+			const spy = vi.fn();
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, spy);
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.ERROR, () => {});
+
+			mockUA.emit('registrationFailed', { cause: 'Connection Error' });
+
+			expect(spy).toHaveBeenCalledWith({ cause: 'Connection Error' });
+		});
+
+		it('emits disconnected with only code and reason', () => {
+			sipManager.initialize(mockClientConfig, mockSettings);
+			mockUA = sipManager.getUserAgent() as unknown as MockUA;
+			const spy = vi.fn();
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, spy);
+
+			mockUA.emit('disconnected', { code: 1006, reason: 'gone', socket: {} });
+
+			expect(spy).toHaveBeenCalledWith({ code: 1006, reason: 'gone' });
+		});
+
 		it('should handle sendInfo errors gracefully', async () => {
 			await sipManager.initialize(mockClientConfig, mockSettings);
 			mockUA = sipManager.getUserAgent() as unknown as MockUA;

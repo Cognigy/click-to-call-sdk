@@ -79,6 +79,7 @@ export const COGNIGY_WEBRTC_EVENTS = {
 	DISCONNECTED: 'disconnected',
 	REGISTERED: 'registered',
 	UNREGISTERED: 'unregistered',
+	REGISTRATION_FAILED: 'registrationFailed',
 
 	// Call events
 	RINGING: 'ringing',

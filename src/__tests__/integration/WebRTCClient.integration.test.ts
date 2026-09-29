@@ -554,6 +554,39 @@ describe('WebRTCClient Integration Tests', () => {
 		});
 	});
 
+	describe('Event detail', () => {
+		it('emits registrationFailed with response status', async () => {
+			client = new WebRTCClient(mockWebRTCClientConfig);
+			await client.connect();
+			mockUA = (client as any).sipManager.getUserAgent();
+			const handler = vi.fn();
+			client.on('registrationFailed', handler);
+			client.on('error', () => {});
+
+			mockUA.emit('registrationFailed', {
+				cause: 'Rejected',
+				response: { status_code: 403, reason_phrase: 'Forbidden', extra: 'x' },
+			});
+
+			expect(handler).toHaveBeenCalledWith({
+				cause: 'Rejected',
+				response: { status_code: 403, reason_phrase: 'Forbidden' },
+			});
+		});
+
+		it('emits disconnected with code and reason', async () => {
+			client = new WebRTCClient(mockWebRTCClientConfig);
+			await client.connect();
+			mockUA = (client as any).sipManager.getUserAgent();
+			const handler = vi.fn();
+			client.on('disconnected', handler);
+
+			mockUA.emit('disconnected', { code: 1006, reason: 'gone', socket: {} });
+
+			expect(handler).toHaveBeenCalledWith({ code: 1006, reason: 'gone' });
+		});
+	});
+
 	describe('Cleanup and Resource Management', () => {
 		beforeEach(async () => {
 			client = new WebRTCClient(mockWebRTCClientConfig);
