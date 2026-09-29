@@ -556,10 +556,16 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 
 	/**
 	 * connect() then startCall(). Rejects like connect(), including when the
-	 * attempt is cancelled via endCall() or the setup timeout fires.
+	 * attempt is cancelled via endCall() or the setup timeout fires. A cancel
+	 * or timeout after connect() resolved but before dialing rejects with
+	 * `Failed to connect: <end cause>` (e.g. `Canceled`, `SETUP_TIMEOUT`).
 	 */
 	async connectAndCall(): Promise<void> {
 		await this.connect();
+		const { status, endInfo } = this.callStateStore.getState();
+		if (isTerminal(status)) {
+			throw new Error(`Failed to connect: ${endInfo?.cause ?? CANCELED}`);
+		}
 		await this.startCall();
 	}
 
