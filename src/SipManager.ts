@@ -44,8 +44,7 @@ export class SipManager extends SDKEventEmitter {
 					]
 				: [];
 
-		// Never log client or settings: they carry the SIP password and TURN credentials.
-		console.log('Creating SIP client for', settings.wsUri);
+		console.log('Creating SIP client with config:', { client: { ...client, password: client.password ? '***' : undefined }, settings });
 
 		const socket = new WebSocketInterface(settings.wsUri);
 

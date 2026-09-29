@@ -63,6 +63,17 @@ describe('SipManager', () => {
 			});
 		});
 
+		it('does not log the SIP password', () => {
+			const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+			try {
+				sipManager.initialize(mockClientConfig, mockSettings);
+				expect(log).toHaveBeenCalled();
+				expect(JSON.stringify(log.mock.calls)).not.toContain(mockClientConfig.password);
+			} finally {
+				log.mockRestore();
+			}
+		});
+
 		it('should stop existing UA before initializing new one', () => {
 			sipManager.initialize(mockClientConfig, mockSettings);
 			const firstUA = sipManager.getUserAgent();
