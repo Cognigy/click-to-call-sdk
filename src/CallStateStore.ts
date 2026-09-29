@@ -41,6 +41,7 @@ export class CallStateStore extends SDKEventEmitter {
 		this.update({
 			status: 'connecting',
 			muted: false,
+			session: null,
 			endInfo: null,
 			transcript: [],
 			remoteStream: null,
@@ -48,10 +49,11 @@ export class CallStateStore extends SDKEventEmitter {
 		});
 	}
 
-	addTranscription(t: { originator: TranscriptMessage['originator']; messages: { text: string }[] }): void {
+	addTranscription(t: { originator: TranscriptMessage['originator']; messages?: { text: string }[] }): void {
 		const now = Date.now();
 		const transcript = [...this.state.transcript];
-		for (const { text } of t.messages) {
+		// Runs inside JsSIP's INFO handler: a malformed payload must not throw
+		for (const { text } of t.messages ?? []) {
 			const duplicate = transcript.some(
 				(m) =>
 					m.text === text &&

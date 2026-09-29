@@ -74,6 +74,11 @@ describe('CallStateStore', () => {
 		expect(spy).toHaveBeenCalledTimes(1);
 	});
 
+	it('ignores a transcription payload without messages', () => {
+		expect(() => store.addTranscription({ originator: 'bot' } as any)).not.toThrow();
+		expect(store.getState().transcript).toEqual([]);
+	});
+
 	it('clears transcript and endInfo on startCall', () => {
 		store.addTranscription({ originator: 'user', messages: [{ text: 'x' }] });
 		store.update({
@@ -84,10 +89,12 @@ describe('CallStateStore', () => {
 			localStream: {} as MediaStream,
 		});
 
+		store.update({ session: { id: 's1' } as any });
 		store.startCall();
 
 		expect(store.getState()).toMatchObject({
 			status: 'connecting',
+			session: null,
 			muted: false,
 			endInfo: null,
 			transcript: [],
