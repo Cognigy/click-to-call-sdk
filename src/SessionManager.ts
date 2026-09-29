@@ -234,7 +234,8 @@ export class SessionManager extends SDKEventEmitter {
 		try {
 			if (originator === 'remote') {
 				const parsedData = JSON.parse(info.body);
-				if (Object.hasOwn(parsedData, '_transcription')) {
+				// biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn needs Safari 15.4 / Chrome 93
+				if (Object.prototype.hasOwnProperty.call(parsedData, '_transcription')) {
 					// Emit transcription event and stop here - don't emit newInfo for transcription events
 					this.emit(COGNIGY_WEBRTC_EVENTS.TRANSCRIPTION, parsedData._transcription);
 					return;
