@@ -8,7 +8,7 @@ A standalone, framework-agnostic SDK for SIP-based voice calling with WebRTC. Bu
 - 🔒 **Type Safe** — full TypeScript support.
 - 📞 **SIP/WebRTC** — built on JsSIP for reliable communication.
 - 🎛️ **Full Control** — start, end, mute, unmute, send info messages.
-- 🔄 **Event Driven** — 17 events for real-time state updates.
+- 🔄 **Event Driven** — 21 events plus an immutable call state (`getState()` / `subscribe()`) for real-time updates.
 - 🎵 **Auto Audio** — remote audio plays automatically; raw stream available via `captureAudio` event.
 - 💬 **Transcription** — real-time transcription events, auto-separated from info messages.
 
@@ -59,23 +59,36 @@ interface WebRTCClientConfig {
   userId?: string;            // Optional user identifier
   pcConfig?: RTCConfiguration; // WebRTC peer connection config
   captureAudio?: boolean;     // Enable captureAudio event to receive raw MediaStream
+  callSetupTimeoutMs?: number; // Fail the call if no SIP session exists this long after connect()/startCall()
+  disconnectAfterCall?: boolean; // Stop the SIP UA once a call ends or fails (default: false)
 }
 ```
+
+- `callSetupTimeoutMs` has no default: unset or `0` means no timer. When set, the timer starts on
+  `connect()` / `startCall()` and is cleared as soon as the SIP session is created (INVITE sent), not when the
+  call is answered. On expiry the call fails with cause `SETUP_TIMEOUT` and `connect()` rejects.
+- `disconnectAfterCall` stops the SIP UA after the call ends or fails. The next `connect()` starts a new one.
 
 ## API
 
 | Method                  | Description                                  |
 |-------------------------|----------------------------------------------|
-| `connect()`             | Connect to SIP server and register           |
-| `disconnect()`          | Disconnect from SIP server                   |
-| `connectAndCall()`      | Connect + start call in one step             |
+| `loadConfig()`          | Fetch the endpoint config once and cache it (concurrent calls share one request); resolves `EndpointConfig`. Does not validate SIP fields, so a widget can render configs `connect()` rejects |
+| `getConfig()`           | Cached `EndpointConfig` or `null` (before `loadConfig()`/`connect()`) |
+| `setUserId(id)`         | Override the SIP user id. Throws once the SIP UA exists (`connect()` started, until `disconnect()`) |
+| `connect()`             | Connect to SIP server and register; starts a new call attempt (state `connecting`). Rejects on config, registration or connection failure, on setup timeout, and when cancelled via `endCall()` / `disconnect()` |
+| `disconnect()`          | Disconnect from SIP server; cancels a pending `connect()` |
+| `connectAndCall()`      | Connect + start call in one step; rejects like `connect()` |
 | `startCall()`           | Start a call (must be connected first)       |
-| `endCall()`             | End the current call                         |
-| `mute()` / `unmute()`   | Toggle microphone                            |
-| `sendInfo(text, data?)` | Send info message during a call              |
-| `sendDTMF(tones, options?)` | Send DTMF tones (`0-9 A-D # * ,`) during a call |
+| `endCall()`             | End the current call; also works while ringing and cancels a pending `connect()` |
+| `mute()` / `unmute()`   | Toggle microphone (requires an answered call) |
+| `sendInfo(text, data?)` | Send info message during an answered call    |
+| `sendDTMF(tones, options?)` | Send DTMF tones (`0-9 A-D # * ,`) during an answered call |
 | `isConnected()`         | Check connection state                       |
-| `getCurrentSession()`   | Get active `CallSession` or `null`           |
+| `getCurrentSession()`   | Get the answered `CallSession` or `null`. Returns `null` while ringing |
+| `getState()`            | Current immutable `ClientState` snapshot     |
+| `subscribe(listener)`   | Listen for state changes (does not fire immediately); returns an unsubscribe function |
+| `getRawSession()`       | Advanced/unstable: underlying JsSIP session, also while ringing |
 | `on(event, callback)`   | Add event listener (returns `this`)          |
 | `off(event, callback)`  | Remove event listener (returns `this`)       |
 | `destroy()`             | Disconnect, end calls, release all resources |
@@ -86,9 +99,11 @@ interface WebRTCClientConfig {
 |-----------------|-------------------------------------------------------------------------|
 | `connecting`    | `()`                                                                    |
 | `connected`     | `()`                                                                    |
-| `disconnected`  | `()`                                                                    |
+| `disconnected`  | `(info: { code?: number; reason?: string })`                            |
 | `registered`    | `()`                                                                    |
 | `unregistered`  | `()`                                                                    |
+| `registrationFailed` | `(info: { cause: string; response?: { status_code: number; reason_phrase: string } })` |
+| `sessionCreated` | SIP session created, INVITE sent `(session: CallSession)`              |
 | `ringing`       | `(session: CallSession)`                                                |
 | `answered`      | `(session: CallSession)`                                                |
 | `ended`         | `(session: CallSession, endInfo: CallEndInfo)`                          |
@@ -101,7 +116,64 @@ interface WebRTCClientConfig {
 | `dtmfSent`      | `(tones: string)`                                                       |
 | `infoReceived`  | `(data: { originator: string; info: { body: string } })`                |
 | `transcription` | `(transcription: { originator: string; messages: { text: string }[] })` |
+| `stateChanged`  | `(state: ClientState)`                                                  |
 | `error`         | `(error: Error)`                                                        |
+
+> **Note:** `error` is only emitted while a listener is registered. Failures also land in `getState().endInfo`
+> and reject `connect()`.
+
+## Call state
+
+`getState()` returns an immutable `ClientState` snapshot; every change produces a new object and emits
+`stateChanged`. `subscribe()` wraps that event and returns an unsubscribe function. It does not fire
+immediately, so read `getState()` for the initial value.
+
+```typescript
+interface ClientState {
+  status: 'idle' | 'connecting' | 'ringing' | 'answered' | 'ended' | 'failed';
+  muted: boolean;
+  session: CallSession | null;
+  endInfo: CallEndInfo | null;      // set when status is 'ended' or 'failed'
+  transcript: TranscriptMessage[];  // { id, text, originator: 'bot' | 'user', timestamp }
+  remoteStream: MediaStream | null;
+  localStream: MediaStream | null;
+}
+```
+
+```typescript
+import { SDK_END_CAUSES } from '@cognigy/click-to-call-sdk';
+
+render(client.getState());
+const unsubscribe = client.subscribe((state) => {
+  render(state);
+  if (state.status === 'failed' && state.endInfo?.cause === SDK_END_CAUSES.SETUP_TIMEOUT) {
+    showRetry();
+  }
+});
+
+// Later
+unsubscribe();
+```
+
+`connect()` / `startCall()` reset the state to `connecting`. A call that ends before a SIP session exists (via
+`endCall()` / `disconnect()`) ends with cause `Canceled`.
+
+### `SDK_END_CAUSES`
+
+`endInfo.cause` values the SDK sets itself, next to JsSIP's own causes (`Busy`, `Rejected`, `Canceled`, ...):
+
+| Cause                   | Meaning                                                     |
+|-------------------------|-------------------------------------------------------------|
+| `CONFIG_FETCH_FAILED`   | The endpoint config could not be fetched                    |
+| `CONFIG_INVALID`        | The config lacks required fields (org, project, SIP credentials) |
+| `WIDGET_INACTIVE`       | The widget is not active in the endpoint config             |
+| `REGISTRATION_FAILED`   | SIP registration failed                                     |
+| `SETUP_TIMEOUT`         | No SIP session within `callSetupTimeoutMs`                  |
+
+## Bundling
+
+The ES and CJS bundles import `jssip` and `events`, which are installed as dependencies. The UMD bundle
+(`<script>` tag) is self-contained.
 
 ## Browser Compatibility
 
