@@ -28,6 +28,19 @@ describe('ConfigManager', () => {
 	});
 
 	describe('fetchConfig', () => {
+		it('config GET sends no Content-Type header (simple CORS request)', async () => {
+			global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.success);
+
+			await configManager.fetchConfig();
+
+			const callArgs = (fetch as any).mock.calls[0];
+			const init = callArgs[1];
+			if (init?.headers) {
+				expect(init.headers['Content-Type']).toBeUndefined();
+				expect(init.headers['content-type']).toBeUndefined();
+			}
+		});
+
 		it('should fetch configuration successfully', async () => {
 			global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.success);
 
@@ -35,9 +48,6 @@ describe('ConfigManager', () => {
 
 			expect(fetch).toHaveBeenCalledWith(mockEndpointUrl, {
 				method: 'GET',
-				headers: {
-					'Content-Type': 'application/json',
-				},
 			});
 			expect(config).toEqual(mockEndpointConfig);
 		});
