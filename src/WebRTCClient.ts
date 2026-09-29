@@ -11,16 +11,28 @@ import { CallStateStore } from './CallStateStore.js';
 import { SDKEventEmitter, COGNIGY_WEBRTC_EVENTS } from './utils/events.js';
 import { isWebRTCSupported, withTimeout } from './utils/helpers.js';
 import type { ExtendedRTCSession } from './types/internal.js';
+import { SDK_END_CAUSES } from './types/index.js';
 import type {
 	WebRTCClient as IWebRTCClient,
 	WebRTCClientConfig,
 	CallSession,
+	CallEndInfo,
+	CallStatus,
 	ClientState,
 	EndpointConfig,
 	EventName,
 	EventCallback,
 	SendDTMFOptions
 } from './types/index.js';
+
+const DEFAULT_CALL_SETUP_TIMEOUT_MS = 10000;
+// JsSIP's own cause names, reused where the SDK ends a call for the same reason
+const CONNECTION_ERROR = 'Connection Error';
+const CANCELED = 'Canceled';
+const INTERNAL_ERROR = 'Internal Error';
+
+const isLive = (status: CallStatus) => status === 'connecting' || status === 'ringing' || status === 'answered';
+const isTerminal = (status: CallStatus) => status === 'ended' || status === 'failed';
 
 export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	private configManager: ConfigManager;
@@ -30,9 +42,18 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	private callStateStore = new CallStateStore();
 	private isInitialized = false;
 	private isDestroyed = false;
+	private readonly callSetupTimeoutMs: number;
+	private readonly disconnectAfterCall: boolean;
+	private connectPromise: Promise<void> | null = null;
+	private abortConnect: ((error: Error) => void) | null = null;
+	private setupTimer: ReturnType<typeof setTimeout> | null = null;
+	/** Session whose events drive the state; events from any other session are ignored. */
+	private currentSessionId: string | null = null;
 
 	constructor(config: WebRTCClientConfig) {
 		super();
+		this.callSetupTimeoutMs = config.callSetupTimeoutMs ?? DEFAULT_CALL_SETUP_TIMEOUT_MS;
+		this.disconnectAfterCall = config.disconnectAfterCall ?? false;
 
 		// Validate WebRTC support
 		if (!isWebRTCSupported()) {
@@ -62,21 +83,105 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	private setupStateHandlers(): void {
 		const store = this.callStateStore;
 		const sm = this.sessionManager;
+		const isCurrent = (session: CallSession) => session.id === this.currentSessionId;
 
+		let previousStatus = store.getState().status;
 		store.on(COGNIGY_WEBRTC_EVENTS.STATE_CHANGED, (state: ClientState) => {
+			const callFinished = isTerminal(state.status) && !isTerminal(previousStatus);
+			previousStatus = state.status;
 			this.emit(COGNIGY_WEBRTC_EVENTS.STATE_CHANGED, state);
+			if (callFinished && this.disconnectAfterCall) {
+				this.disconnect().catch(() => undefined);
+			}
 		});
-		sm.on(COGNIGY_WEBRTC_EVENTS.SESSION_CREATED, (session) => store.update({ session }));
-		sm.on(COGNIGY_WEBRTC_EVENTS.RINGING, (session) => store.update({ status: 'ringing', session }));
-		sm.on(COGNIGY_WEBRTC_EVENTS.ANSWERED, (session) => store.update({ status: 'answered', session }));
-		sm.on(COGNIGY_WEBRTC_EVENTS.ENDED, (session, endInfo) => store.update({ status: 'ended', session, endInfo }));
-		sm.on(COGNIGY_WEBRTC_EVENTS.FAILED, (session, endInfo) => store.update({ status: 'failed', session, endInfo }));
-		sm.on(COGNIGY_WEBRTC_EVENTS.MUTED, () => store.update({ muted: true }));
-		sm.on(COGNIGY_WEBRTC_EVENTS.UNMUTED, () => store.update({ muted: false }));
+		sm.on(COGNIGY_WEBRTC_EVENTS.SESSION_CREATED, (session) => {
+			this.clearSetupTimer();
+			this.currentSessionId = session.id;
+			store.update({ session });
+		});
+		sm.on(COGNIGY_WEBRTC_EVENTS.RINGING, (session) => {
+			if (isCurrent(session)) store.update({ status: 'ringing', session });
+		});
+		sm.on(COGNIGY_WEBRTC_EVENTS.ANSWERED, (session) => {
+			if (isCurrent(session)) store.update({ status: 'answered', session });
+		});
+		sm.on(COGNIGY_WEBRTC_EVENTS.ENDED, (session, endInfo) => {
+			if (isCurrent(session)) store.update({ status: 'ended', session, endInfo });
+		});
+		sm.on(COGNIGY_WEBRTC_EVENTS.FAILED, (session, endInfo) => {
+			if (isCurrent(session)) store.update({ status: 'failed', session, endInfo });
+		});
+		sm.on(COGNIGY_WEBRTC_EVENTS.MUTED, (session) => {
+			if (isCurrent(session)) store.update({ muted: true });
+		});
+		sm.on(COGNIGY_WEBRTC_EVENTS.UNMUTED, (session) => {
+			if (isCurrent(session)) store.update({ muted: false });
+		});
 		sm.on(COGNIGY_WEBRTC_EVENTS.TRANSCRIPTION, (info) => store.addTranscription(info));
 		sm.on(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, (remoteStream, localStream) =>
 			store.update({ remoteStream, localStream })
 		);
+
+		// Transport lost mid-call. Before a session exists JsSIP is still
+		// connecting or reconnecting, and the setup timer covers that.
+		this.sipManager.on(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, () => {
+			if (!this.sessionManager.getRawSession()) {
+				return;
+			}
+			this.endCallState('ended', null, CONNECTION_ERROR);
+			this.disconnect().catch(() => undefined);
+		});
+	}
+
+	private startSetupTimer(): void {
+		this.clearSetupTimer();
+		this.setupTimer = setTimeout(() => this.onSetupTimeout(), this.callSetupTimeoutMs);
+	}
+
+	private clearSetupTimer(): void {
+		if (this.setupTimer) {
+			clearTimeout(this.setupTimer);
+			this.setupTimer = null;
+		}
+	}
+
+	private onSetupTimeout(): void {
+		this.setupTimer = null;
+		// Detach first so the terminated session's own failed event doesn't win
+		this.currentSessionId = null;
+		if (this.sessionManager.getRawSession()) {
+			try {
+				this.sessionManager.terminate(480, 'Call setup timeout');
+			} catch (error) {
+				console.error('Failed to terminate session on setup timeout:', error);
+			}
+		}
+		this.abortConnect?.(new Error('Call setup timeout'));
+		this.teardown();
+		this.endCallState('failed', 'local', SDK_END_CAUSES.SETUP_TIMEOUT);
+	}
+
+	/** Set a terminal state the SDK decided on, detached from any session. */
+	private endCallState(status: 'ended' | 'failed', originator: CallEndInfo['originator'], cause: string, description: string | null = null): void {
+		this.clearSetupTimer();
+		this.currentSessionId = null;
+		this.callStateStore.update({ status, endInfo: { originator, cause, description } });
+	}
+
+	/** Stop audio, sessions and the UA; keeps every listener for the next call. */
+	private teardown(): void {
+		this.clearSetupTimer();
+		this.audioManager.stopAudio();
+		this.sessionManager.terminateAll();
+		this.sipManager.stop();
+		this.isInitialized = false;
+	}
+
+	/** Reset the state for a new call and arm the setup timer. */
+	private beginCall(): void {
+		this.currentSessionId = null;
+		this.callStateStore.startCall();
+		this.startSetupTimer();
 	}
 
 	/**
@@ -114,7 +219,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		});
 
 		this.sipManager.on(COGNIGY_WEBRTC_EVENTS.ERROR, (error) => {
-			this.emit(COGNIGY_WEBRTC_EVENTS.ERROR, error);
+			this.emitError(error);
 		});
 
 		// Session Manager events
@@ -172,12 +277,22 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		});
 
 		this.audioManager.on(COGNIGY_WEBRTC_EVENTS.ERROR, (error) => {
-			this.emit(COGNIGY_WEBRTC_EVENTS.ERROR, error);
+			this.emitError(error);
 		});
 		this.audioManager.on(COGNIGY_WEBRTC_EVENTS.CAPTURE_AUDIO, (stream) => {
 			this.emit(COGNIGY_WEBRTC_EVENTS.CAPTURE_AUDIO, stream);
 		});
 
+	}
+
+	/**
+	 * EventEmitter throws on an unhandled 'error', which would surface inside
+	 * JsSIP's callbacks. Failures also reach the state and connect()'s rejection.
+	 */
+	private emitError(error: Error): void {
+		if (this.listenerCount(COGNIGY_WEBRTC_EVENTS.ERROR) > 0) {
+			this.emit(COGNIGY_WEBRTC_EVENTS.ERROR, error);
+		}
 	}
 
 	/**
@@ -204,26 +319,57 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	}
 
 	/**
-	 * Connect to the SIP server
+	 * Connect to the SIP server and start a new call attempt: resets the state
+	 * to `connecting` and arms the setup timer. While a call is in progress it
+	 * returns the in-flight promise. Rejects (and sets state `failed`) on
+	 * config, registration or connection failure, on setup timeout, and when
+	 * endCall()/disconnect() cancel it.
 	 */
-	async connect(): Promise<void> {
+	connect(): Promise<void> {
 		if (this.isDestroyed) {
-			throw new Error('Client has been destroyed');
+			return Promise.reject(new Error('Client has been destroyed'));
+		}
+		if (this.connectPromise && isLive(this.callStateStore.getState().status)) {
+			return this.connectPromise;
 		}
 
-		this.callStateStore.startCall();
+		this.beginCall();
+		const promise = this.establishConnection();
+		this.connectPromise = promise;
+		return promise;
+	}
+
+	private async establishConnection(): Promise<void> {
+		let cause: string = CONNECTION_ERROR;
+		let aborted = false;
+		let removeListeners = () => {};
+		let abort!: (error: Error) => void;
+		const abortion = new Promise<never>((_, reject) => {
+			abort = (error: Error) => {
+				aborted = true;
+				reject(error);
+			};
+		});
+		abortion.catch(() => undefined);
+		this.abortConnect = abort;
+		const abortable = <T>(promise: Promise<T>) => Promise.race([promise, abortion]);
 
 		try {
-			await this.loadConfig();
+			if (this.isConnected()) {
+				return;
+			}
+
+			cause = SDK_END_CAUSES.CONFIG_FETCH_FAILED;
+			await abortable(this.loadConfig());
+			cause = SDK_END_CAUSES.CONFIG_INVALID;
 			this.configManager.assertCallable();
+			cause = SDK_END_CAUSES.WIDGET_INACTIVE;
 			if (!this.configManager.isActive()) {
 				throw new Error('WebRTC widget is not active in the configuration');
 			}
+			cause = CONNECTION_ERROR;
 
-			// Get SIP credentials
 			const sipCredentials = this.configManager.getSipCredentials();
-
-			// Initialize SIP manager
 			this.sipManager.initialize(
 				{
 					fullUsername: sipCredentials.fullUsername,
@@ -240,107 +386,132 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 				}
 			);
 
-			// Start SIP connection
-			this.sipManager.start();
+			await abortable(
+				withTimeout(
+					new Promise<void>((resolve, reject) => {
+						const sip = this.sipManager;
+						let connected = false;
+						let registered = !sip.needsRegistration();
+						const settle = () => {
+							if (connected && registered) resolve();
+						};
+						const onConnected = () => {
+							connected = true;
+							settle();
+						};
+						const onRegistered = () => {
+							registered = true;
+							settle();
+						};
+						// Emitted just before the matching 'error'
+						const onRegistrationFailed = () => {
+							cause = SDK_END_CAUSES.REGISTRATION_FAILED;
+						};
+						const onError = (error: Error) => reject(error);
 
-			// Wait for connection with timeout
-			await withTimeout(
-				new Promise<void>((resolve, reject) => {
-					let connected = false;
-					let registered = !this.sipManager.needsRegistration();
+						sip.on(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
+						sip.on(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
+						sip.on(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, onRegistrationFailed);
+						sip.on(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
+						removeListeners = () => {
+							sip.off(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
+							sip.off(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
+							sip.off(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, onRegistrationFailed);
+							sip.off(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
+						};
 
-					const onConnected = () => {
-						connected = true;
-						if (registered) {
-							this.sipManager.off(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
-							this.sipManager.off(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
-							this.sipManager.off(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
-							this.isInitialized = true;
-							resolve();
-						}
-					};
-
-					const onRegistered = () => {
-						registered = true;
-						if (connected) {
-							this.sipManager.off(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
-							this.sipManager.off(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
-							this.sipManager.off(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
-							this.isInitialized = true;
-							resolve();
-						}
-					};
-
-					const onError = (error: Error) => {
-						this.sipManager.off(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
-						this.sipManager.off(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
-						this.sipManager.off(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
-						reject(error);
-					};
-
-					this.sipManager.on(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
-					this.sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
-					this.sipManager.on(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
-				}),
-				15000 // 15 second timeout
+						sip.start();
+					}),
+					15000
+				)
 			);
-
+			this.isInitialized = true;
 		} catch (error) {
+			// Whoever aborted has already torn down and set the state
+			if (!aborted) {
+				this.teardown();
+				this.endCallState('failed', null, cause);
+			}
 			throw new Error(`Failed to connect: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		} finally {
+			removeListeners();
+			if (this.abortConnect === abort) {
+				this.abortConnect = null;
+			}
 		}
 	}
 
 	/**
-	 * Disconnect from the SIP server
+	 * Disconnect from the SIP server. Cancels a pending connect(); a call that
+	 * has no session yet ends with cause `Canceled`.
 	 */
 	async disconnect(): Promise<void> {
-		if (!this.isInitialized) {
+		if (!this.isInitialized && !this.sipManager.getUserAgent() && !this.abortConnect) {
 			return;
 		}
 
 		try {
-			// Stop audio
-			this.audioManager.stopAudio();
-
-			// Keeps listeners: destroy() would drop the client's wiring for later calls
-			this.sessionManager.terminateAll();
-
-			// Stop SIP connection
-			this.sipManager.stop();
-
-			this.isInitialized = false;
+			this.cancelOrTeardown(new Error('Disconnected'));
 		} catch (error) {
 			console.error('Error during disconnect:', error);
 			throw new Error(`Failed to disconnect: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
+	/** Tear down; a live call without a session ends as `Canceled`. */
+	private cancelOrTeardown(reason: Error): void {
+		const canceling = isLive(this.callStateStore.getState().status) && !this.sessionManager.getRawSession();
+		this.abortConnect?.(reason);
+		this.teardown();
+		if (canceling) {
+			this.endCallState('ended', 'local', CANCELED);
+		}
+	}
+
 	/**
-	 * Start a call
+	 * Start a call. No-op while a session is live. On a connected client after
+	 * an earlier call (no new connect()), resets the state and arms the setup
+	 * timer like connect() does.
 	 */
 	async startCall(): Promise<void> {
 		if (!this.isInitialized) {
 			throw new Error('Client not connected. Call connect() first.');
 		}
 
+		if (this.sessionManager.getRawSession()) {
+			return;
+		}
+
 		if (this.sipManager.needsRegistration() && !this.sipManager.isRegistered()) {
 			throw new Error('SIP client not registered');
 		}
 
+		if (this.callStateStore.getState().status !== 'connecting') {
+			this.beginCall();
+		}
+
 		try {
 			this.sipManager.call(this.configManager.getCallTarget());
-
 		} catch (error) {
-			throw new Error(`Failed to start call: ${error instanceof Error ? error.message : 'Unknown error'}`);
+			const message = error instanceof Error ? error.message : 'Unknown error';
+			this.endCallState('failed', 'local', INTERNAL_ERROR, message);
+			throw new Error(`Failed to start call: ${message}`);
 		}
 	}
 
 	/**
-	 * End the current call
+	 * End the current call. Before a session exists (still connecting), stops
+	 * the UA and ends with cause `Canceled`; otherwise sends 480 and the state
+	 * follows the session's events.
 	 */
 	async endCall(): Promise<void> {
+		if (!this.sessionManager.getRawSession() && isLive(this.callStateStore.getState().status)) {
+			this.cancelOrTeardown(new Error(CANCELED));
+			return;
+		}
+		this.clearSetupTimer();
 		try {
-			this.sessionManager.terminate();
+			this.sessionManager.terminate(480, 'Ended by user');
 		} catch (error) {
 			throw new Error(`Failed to end call: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
@@ -457,6 +628,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 
 		try {
 			await this.disconnect();
+			this.clearSetupTimer();
 
 			// Clean up managers
 			this.audioManager.destroy();

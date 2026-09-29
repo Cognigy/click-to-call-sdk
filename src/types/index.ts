@@ -74,7 +74,25 @@ export interface WebRTCClientConfig {
 	userId?: string;
 	pcConfig?: RTCConfiguration;
 	captureAudio?: boolean;
+	/**
+	 * Fail the call if no SIP session exists this long after connect()
+	 * (or startCall() on a connected client). Default 10000.
+	 */
+	callSetupTimeoutMs?: number;
+	/** Stop the SIP UA once a call ends or fails; the next connect() starts a new one. Default false. */
+	disconnectAfterCall?: boolean;
 }
+
+/** `endInfo.cause` values the SDK sets itself, next to JsSIP's causes. */
+export const SDK_END_CAUSES = {
+	CONFIG_FETCH_FAILED: "CONFIG_FETCH_FAILED",
+	CONFIG_INVALID: "CONFIG_INVALID",
+	WIDGET_INACTIVE: "WIDGET_INACTIVE",
+	REGISTRATION_FAILED: "REGISTRATION_FAILED",
+	SETUP_TIMEOUT: "SETUP_TIMEOUT",
+} as const;
+
+export type SdkEndCause = (typeof SDK_END_CAUSES)[keyof typeof SDK_END_CAUSES];
 
 // Event types
 export interface CallSession {
