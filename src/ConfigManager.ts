@@ -45,9 +45,6 @@ export class ConfigManager {
 			const response = await withTimeout(
 				fetch(this.endpointUrl, {
 					method: 'GET',
-					headers: {
-						'Content-Type': 'application/json',
-					},
 				}),
 				10000 // 10 second timeout
 			);
