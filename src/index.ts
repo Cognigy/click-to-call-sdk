@@ -15,6 +15,7 @@ export type {
 	CreateWebRTCClientOptions,
 	CreateWebRTCClient,
 	EndpointConfig,
+	WebrtcWidgetConfig,
 	SipConnectivityInfo,
 	CallSession,
 	CallEndInfo,

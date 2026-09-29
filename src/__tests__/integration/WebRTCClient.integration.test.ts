@@ -79,6 +79,97 @@ describe('WebRTCClient Integration Tests', () => {
 		});
 	});
 
+	describe('Config API', () => {
+		const invalidSipConfig = () => ({
+			...mockEndpointConfig,
+			endpointSettings: {
+				...mockEndpointConfig.endpointSettings,
+				sipConnectivityInfo: { wsUri: 'wss://sip.example.com:8443' },
+			},
+		});
+		const respondWith = (body: unknown) => {
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: () => Promise.resolve(body),
+			});
+		};
+
+		it('loadConfig fetches once and caches', async () => {
+			client = new WebRTCClient(mockWebRTCClientConfig);
+
+			expect(client.getConfig()).toBeNull();
+			const first = await client.loadConfig();
+			const second = await client.loadConfig();
+
+			expect(fetch).toHaveBeenCalledTimes(1);
+			expect(second).toBe(first);
+			expect(client.getConfig()).toBe(first);
+		});
+
+		it('loadConfig shares one fetch between concurrent calls', async () => {
+			client = new WebRTCClient(mockWebRTCClientConfig);
+
+			const [a, b] = await Promise.all([client.loadConfig(), client.loadConfig()]);
+
+			expect(fetch).toHaveBeenCalledTimes(1);
+			expect(a).toBe(b);
+		});
+
+		it('loadConfig refetches after a failed fetch', async () => {
+			global.fetch = vi
+				.fn()
+				.mockResolvedValueOnce(mockFetchResponses.unauthorized)
+				.mockResolvedValueOnce(mockFetchResponses.success);
+			client = new WebRTCClient(mockWebRTCClientConfig);
+
+			await expect(client.loadConfig()).rejects.toThrow(/401/);
+			await expect(client.loadConfig()).resolves.toEqual(mockEndpointConfig);
+			expect(fetch).toHaveBeenCalledTimes(2);
+		});
+
+		it('loadConfig resolves configs that fail SIP validation', async () => {
+			respondWith(invalidSipConfig());
+			client = new WebRTCClient(mockWebRTCClientConfig);
+
+			await expect(client.loadConfig()).resolves.toMatchObject({ organisationId: 'test-org-id' });
+		});
+
+		it('connect rejects configs that fail SIP validation', async () => {
+			respondWith(invalidSipConfig());
+			client = new WebRTCClient(mockWebRTCClientConfig);
+
+			await expect(client.connect()).rejects.toThrow(/Invalid endpoint configuration/);
+			expect(client.isConnected()).toBe(false);
+		});
+
+		it('setUserId before connect sets the SIP identity', async () => {
+			client = new WebRTCClient({ endpointUrl: mockWebRTCClientConfig.endpointUrl });
+
+			await client.loadConfig();
+			client.setUserId('webrtc-x');
+			await client.connect();
+
+			const ua = (client as any).sipManager.getUserAgent() as MockUAType;
+			expect(ua.config.uri).toBe('sip:webrtc-x@sip.example.com');
+		});
+
+		it('setUserId after connect throws', async () => {
+			client = new WebRTCClient(mockWebRTCClientConfig);
+			await client.connect();
+
+			expect(() => client.setUserId('webrtc-x')).toThrow('Cannot change userId while connected');
+		});
+
+		it('setUserId works again after disconnect', async () => {
+			client = new WebRTCClient(mockWebRTCClientConfig);
+			await client.connect();
+			await client.disconnect();
+
+			expect(() => client.setUserId('webrtc-x')).not.toThrow();
+		});
+	});
+
 	describe('Call Workflow', () => {
 		beforeEach(async () => {
 			client = new WebRTCClient(mockWebRTCClientConfig);
