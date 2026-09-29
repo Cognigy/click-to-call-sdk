@@ -255,6 +255,55 @@ describe('WebRTCClient Integration Tests', () => {
 			});
 		}
 
+		it('keeps state.session in sync on mute and hold without changing status', async () => {
+			await client.startCall();
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			const session = mockUA.getLastSession();
+			session.simulateAccepted();
+
+			session.emit('muted');
+			expect(client.getState()).toMatchObject({ muted: true, session: { muted: true } });
+			session.emit('unmuted');
+			expect(client.getState()).toMatchObject({ muted: false, session: { muted: false } });
+
+			session.emit('hold', { originator: 'local' });
+			expect(client.getState()).toMatchObject({ status: 'answered', session: { localHold: true } });
+			session.emit('hold', { originator: 'remote' });
+			expect(client.getState().session).toMatchObject({ localHold: true, remoteHold: true });
+			session.emit('unhold', { originator: 'local' });
+			session.emit('unhold', { originator: 'remote' });
+			expect(client.getState()).toMatchObject({
+				status: 'answered',
+				session: { localHold: false, remoteHold: false },
+			});
+		});
+
+		it('never publishes a session status ahead of the top-level status', async () => {
+			const snapshots: Array<[string, string | undefined]> = [];
+			client.subscribe((s) => snapshots.push([s.status, s.session?.status]));
+			await client.startCall();
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			const session = mockUA.getLastSession();
+			session.simulateAccepted();
+			session.simulateEnded();
+
+			for (const [status, sessionStatus] of snapshots) {
+				if (sessionStatus && sessionStatus !== 'init') expect(sessionStatus).toBe(status);
+			}
+		});
+
+		it('ignores session updates from a session that is not current', async () => {
+			await client.startCall();
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			const current = client.getState().session;
+			(client as any).sessionManager.emit(COGNIGY_WEBRTC_EVENTS.SESSION_UPDATED, {
+				...current,
+				id: 'other-session',
+				muted: true,
+			});
+			expect(client.getState().session).toBe(current);
+		});
+
 		it('tracks ringing, answered and ended through a full call', async () => {
 			const fresh = new WebRTCClient(mockWebRTCClientConfig);
 			try {
