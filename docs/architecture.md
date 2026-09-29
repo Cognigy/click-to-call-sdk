@@ -83,13 +83,18 @@ Failures reject with `Failed to connect: …` and set the state to `failed` with
 ### Call lifecycle
 
 ```
-idle → connecting → ringing → answered → ended
-          │            │                → failed
-          └────────────┴─→ ended (Canceled) / failed (SETUP_TIMEOUT, config, registration)
+idle → connecting → ringing → answered → ended / failed
+          │            │
+          │            └─→ ended / failed (session events, Connection Error)
+          │
+          └─→ before a session exists:
+              ended (Canceled) / failed (SETUP_TIMEOUT, config, registration, Connection Error)
 ```
 
-- `connecting`: from `connect()` / `startCall()` until the SIP session exists.
-- `callSetupTimeoutMs` (opt-in, no default): the timer starts on `connect()` / `startCall()` and is cleared when the SIP session is created (`sessionCreated`, INVITE sent), not on answer. On expiry the attempt is torn down, `connect()` rejects and the state becomes `failed` with `SETUP_TIMEOUT`.
+- `connecting`: from `connect()` (or `startCall()` on a client that already completed a call) until ringing.
+- `SETUP_TIMEOUT` and the SDK's own `Canceled` only occur before a session exists; once a session exists, the
+  state follows its events (`endCall()` sends 480 and JsSIP reports the cause).
+- `callSetupTimeoutMs` (opt-in, no default): the timer starts on `connect()`; `startCall()` re-arms it only on a client that already completed a call. It is cleared when the SIP session is created (`sessionCreated`, INVITE sent), not on answer. On expiry the attempt is torn down, a pending `connect()` rejects and the state becomes `failed` with `SETUP_TIMEOUT`.
 - Only events of the current session drive the state; events from any other session are ignored.
 - A lost transport while a session exists ends the call with cause `Connection Error` and disconnects. Before a session exists the setup timer covers it.
 - `disconnectAfterCall`: when the state turns terminal (`ended` / `failed`) the SIP UA is stopped before `stateChanged` is forwarded; the next `connect()` starts a new UA. Listeners stay registered across `disconnect()`.
