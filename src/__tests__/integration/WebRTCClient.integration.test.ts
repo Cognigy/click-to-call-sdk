@@ -235,6 +235,26 @@ describe('WebRTCClient Integration Tests', () => {
 			expect(client.getState().localStream).toBe(local);
 		});
 
+		for (const outcome of ['ended', 'failed'] as const) {
+			it(`clears remote and local streams when the call ${outcome}`, async () => {
+				await client.startCall();
+				await new Promise((resolve) => setTimeout(resolve, 20));
+				const session = mockUA.getLastSession();
+				session.simulatePeerConnection();
+				const pc = session._connection;
+				pc.getReceivers.mockReturnValue([{ track: { id: 'r1', kind: 'audio' } }]);
+				pc.getSenders.mockReturnValue([{ track: { id: 'l1', kind: 'audio' } }]);
+				session.simulateAccepted();
+				expect(client.getState().remoteStream).toBeTruthy();
+				expect(client.getState().localStream).toBeTruthy();
+
+				if (outcome === 'ended') session.simulateEnded();
+				else session.simulateFailed();
+
+				expect(client.getState()).toMatchObject({ status: outcome, remoteStream: null, localStream: null });
+			});
+		}
+
 		it('tracks ringing, answered and ended through a full call', async () => {
 			const fresh = new WebRTCClient(mockWebRTCClientConfig);
 			try {

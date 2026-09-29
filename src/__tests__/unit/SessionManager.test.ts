@@ -433,6 +433,22 @@ describe('SessionManager', () => {
 			expect(spy).not.toHaveBeenCalled();
 		});
 
+		it('emits a null pair once when the last audio track goes away', () => {
+			const spy = vi.fn();
+			sessionManager.on(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, spy);
+			rtcSession.simulatePeerConnection();
+			const pc = rtcSession._connection;
+			pc.getReceivers.mockReturnValue([{ track: audioTrack('r1') }]);
+			pc.dispatch('negotiationneeded');
+
+			pc.getReceivers.mockReturnValue([]);
+			pc.dispatch('negotiationneeded');
+			pc.dispatch('negotiationneeded');
+
+			expect(spy).toHaveBeenCalledTimes(2);
+			expect(spy.mock.calls[1].slice(0, 2)).toEqual([null, null]);
+		});
+
 		it('emits on peer-connection track and negotiationneeded', () => {
 			const spy = vi.fn();
 			sessionManager.on(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, spy);
