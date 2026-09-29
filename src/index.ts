@@ -30,7 +30,10 @@ export type {
 	TranscriptMessage,
 	ClientState,
 	ExtendedRTCSession,
+	SdkEndCause,
 } from './types/index.js';
+
+export { SDK_END_CAUSES } from './types/index.js';
 
 // Export main client class
 export { WebRTCClient };
