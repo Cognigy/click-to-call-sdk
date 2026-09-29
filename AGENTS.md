@@ -28,6 +28,7 @@ click-to-call-sdk/
 │   ├── ConfigManager.ts      # Endpoint config fetching & caching
 │   ├── SipManager.ts         # JsSIP User Agent wrapper
 │   ├── SessionManager.ts     # Call session lifecycle
+│   ├── CallStateStore.ts     # Immutable call state snapshots
 │   ├── AudioManager.ts       # Remote audio playback
 │   ├── types/
 │   │   ├── index.ts          # Public type definitions
@@ -72,6 +73,7 @@ Consumer App (React, Vue, Vanilla JS)
         ├── ConfigManager     ← src/ConfigManager.ts
         ├── SipManager        ← src/SipManager.ts
         ├── SessionManager    ← src/SessionManager.ts
+        ├── CallStateStore    ← src/CallStateStore.ts
         └── AudioManager      ← src/AudioManager.ts
 ```
 
@@ -79,10 +81,11 @@ Consumer App (React, Vue, Vanilla JS)
 
 | Module | File | Purpose |
 |--------|------|---------|
-| **WebRTCClient** | `src/WebRTCClient.ts` | Orchestrates managers, exposes public API (`connect`, `startCall`, `endCall`, `mute`, etc.) |
+| **WebRTCClient** | `src/WebRTCClient.ts` | Orchestrates managers, exposes public API (`connect`, `startCall`, `endCall`, `mute`, `getState`, `subscribe`, etc.), owns the setup timer and `disconnectAfterCall` |
 | **ConfigManager** | `src/ConfigManager.ts` | Fetches endpoint config via HTTP, derives SIP credentials and userId |
 | **SipManager** | `src/SipManager.ts` | JsSIP UA wrapper, WebSocket transport, SIP registration |
 | **SessionManager** | `src/SessionManager.ts` | Call session lifecycle, events, info/transcription parsing |
+| **CallStateStore** | `src/CallStateStore.ts` | Immutable `ClientState` snapshots (status, mute, session, endInfo, transcript, streams); emits `stateChanged` |
 | **AudioManager** | `src/AudioManager.ts` | Remote audio playback, `captureAudio` event for raw stream access |
 
 ## Development Commands
@@ -167,6 +170,7 @@ Enforced by commitlint (local) and PR title checker (CI).
 2. **New events**: Add to `COGNIGY_WEBRTC_EVENTS` in `src/utils/events.ts`, add callback type in `src/types/index.ts`
 3. **New public types**: Export from `src/types/index.ts`, re-export in `src/index.ts`
 4. **New public methods**: Add to `WebRTCClient`, update README.md API table
+5. **New `ClientState` fields or `endInfo.cause` values**: Update `CallStateStore`, `SDK_END_CAUSES` and the README "Call state" section
 
 ### Adding Tests
 
@@ -186,9 +190,9 @@ Enforced by commitlint (local) and PR title checker (CI).
 
 | Format | File | Usage |
 |--------|------|-------|
-| UMD | `dist/webRTCSDK.js` | Browser `<script>` tag |
-| CJS | `dist/webRTCSDK.cjs.js` | CommonJS `require()` |
-| ES | `dist/webRTCSDK.es.js` | ES module `import` |
+| UMD | `dist/webRTCSDK.js` | Browser `<script>` tag (self-contained) |
+| CJS | `dist/webRTCSDK.cjs.js` | CommonJS `require()` (imports `jssip`, `events`) |
+| ES | `dist/webRTCSDK.es.js` | ES module `import` (imports `jssip`, `events`) |
 | Types | `dist/index.d.ts` | TypeScript declarations |
 
 ### Event System
@@ -197,12 +201,13 @@ Events are defined in `src/utils/events.ts` as `COGNIGY_WEBRTC_EVENTS`:
 
 | Category | Events |
 |----------|--------|
-| Connection | `connecting`, `connected`, `disconnected`, `registered`, `unregistered` |
-| Call | `ringing`, `answered`, `ended`, `failed` |
+| Connection | `connecting`, `connected`, `disconnected`, `registered`, `unregistered`, `registrationFailed` |
+| Call | `sessionCreated`, `ringing`, `answered`, `ended`, `failed` |
 | Audio | `muted`, `unmuted`, `audioEnded`, `captureAudio` |
 | Communication | `infoSent`, `dtmfSent`, `infoReceived`, `transcription` |
-| Internal | `sessionCreated`, `sessionUpdated`, `sessionDestroyed` |
-| Error | `error` |
+| State | `stateChanged` |
+| Internal | `sessionUpdated`, `sessionDestroyed`, `streamsChanged` |
+| Error | `error` (only emitted when a listener is registered) |
 
 ---
 
