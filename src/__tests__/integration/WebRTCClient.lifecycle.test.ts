@@ -602,6 +602,27 @@ describe('WebRTCClient call lifecycle', () => {
 			expect(client.getState().endInfo?.cause).toBe('Canceled');
 		});
 
+		it.each([
+			['disconnect', () => client.disconnect()],
+			['endCall', () => client.endCall()],
+		])('%s right after connect with a cached config starts no UA', async (_name, cancel) => {
+			create();
+			await client.loadConfig();
+			const p = client.connect();
+			const settled = expect(p).rejects.toThrow(/^Failed to connect/);
+			void cancel();
+
+			await vi.advanceTimersByTimeAsync(100);
+			await settled;
+
+			expect(ua.instances.every((instance) => instance.start.mock.calls.length === 0)).toBe(true);
+			expect((client as any).sipManager.getUserAgent()).toBeNull();
+			expect(client.isConnected()).toBe(false);
+			expect(client.getState().status).toBe('ended');
+			expect(client.getState().endInfo?.cause).toBe('Canceled');
+			expect(() => client.setUserId('webrtc-after-cancel')).not.toThrow();
+		});
+
 		it('disconnect stops a UA left behind while connecting', async () => {
 			create();
 			const p = client.connect();

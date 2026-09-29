@@ -371,6 +371,10 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 
 			cause = SDK_END_CAUSES.CONFIG_FETCH_FAILED;
 			await abortable(this.loadConfig());
+			// A cached config wins the race against a same-tick abort
+			if (aborted) {
+				throw abortError ?? new Error(CANCELED);
+			}
 			cause = SDK_END_CAUSES.CONFIG_INVALID;
 			this.configManager.assertCallable();
 			cause = SDK_END_CAUSES.WIDGET_INACTIVE;
