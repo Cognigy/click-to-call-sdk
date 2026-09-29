@@ -221,18 +221,57 @@ describe('WebRTCClient Integration Tests', () => {
 			expect(listener).toHaveBeenCalledTimes(1);
 		});
 
-		it('records transcription messages in state', async () => {
-			const session = (client as any).sessionManager;
-			session.emit(COGNIGY_WEBRTC_EVENTS.TRANSCRIPTION, { originator: 'bot', messages: [{ text: 'hi' }] });
-			expect(client.getState().transcript.map((m) => m.text)).toEqual(['hi']);
+		const startSession = async () => {
+			await client.startCall();
+			await new Promise((resolve) => setTimeout(resolve, 20));
+			return mockUA.getLastSession();
+		};
+		const transcriptionInfo = (text: string) => ({
+			originator: 'remote',
+			info: { body: JSON.stringify({ _transcription: { originator: 'bot', messages: [{ text }] } }) },
 		});
 
-		it('tracks stream changes in state', () => {
+		it('records transcription messages in state', async () => {
+			const session = await startSession();
+			const publicSpy = vi.fn();
+			client.on(COGNIGY_WEBRTC_EVENTS.TRANSCRIPTION, publicSpy);
+			session.emit('newInfo', transcriptionInfo('hi'));
+			expect(client.getState().transcript.map((m) => m.text)).toEqual(['hi']);
+			expect(publicSpy).toHaveBeenCalledWith({ originator: 'bot', messages: [{ text: 'hi' }] });
+		});
+
+		it('tracks stream changes in state', async () => {
 			const remote = {} as MediaStream;
 			const local = {} as MediaStream;
-			(client as any).sessionManager.emit(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, remote, local);
+			await startSession();
+			const { id } = client.getState().session!;
+			(client as any).sessionManager.emit(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, remote, local, id);
 			expect(client.getState().remoteStream).toBe(remote);
 			expect(client.getState().localStream).toBe(local);
+		});
+
+		it('ignores transcription and streams from a previous session', async () => {
+			const first = await startSession();
+			first.simulatePeerConnection();
+			first.simulateAccepted();
+			first.simulateEnded();
+			const second = await startSession();
+			expect(second).not.toBe(first);
+			second.simulatePeerConnection();
+			second._connection.getReceivers.mockReturnValue([{ track: { id: 'r2', kind: 'audio' } }]);
+			second.simulateAccepted();
+			const { remoteStream } = client.getState();
+			expect(remoteStream).toBeTruthy();
+
+			first.emit('newInfo', transcriptionInfo('stale'));
+			first._connection.getReceivers.mockReturnValue([{ track: { id: 'r1', kind: 'audio' } }]);
+			first._connection.dispatch('negotiationneeded');
+
+			expect(client.getState().transcript).toEqual([]);
+			expect(client.getState().remoteStream).toBe(remoteStream);
+
+			second.emit('newInfo', transcriptionInfo('fresh'));
+			expect(client.getState().transcript.map((m) => m.text)).toEqual(['fresh']);
 		});
 
 		for (const outcome of ['ended', 'failed'] as const) {

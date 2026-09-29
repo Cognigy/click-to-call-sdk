@@ -218,7 +218,7 @@ describe('SessionManager', () => {
 				Object.hasOwn = hasOwn;
 			}
 
-			expect(transcription).toHaveBeenCalledWith({ messages: [] });
+			expect(transcription).toHaveBeenCalledWith({ messages: [] }, rtcSession.data.sessionId);
 			expect(infoReceived).not.toHaveBeenCalled();
 		});
 	});
@@ -447,6 +447,17 @@ describe('SessionManager', () => {
 
 			expect(spy).toHaveBeenCalledTimes(2);
 			expect(spy.mock.calls[1].slice(0, 2)).toEqual([null, null]);
+		});
+
+		it('tags streamsChanged with the originating session id', () => {
+			const spy = vi.fn();
+			sessionManager.on(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, spy);
+			rtcSession.simulatePeerConnection();
+			rtcSession._connection.getReceivers.mockReturnValue([{ track: audioTrack('r1') }]);
+
+			rtcSession.simulateAccepted();
+
+			expect(spy.mock.calls[0][2]).toBe(rtcSession.data.sessionId);
 		});
 
 		it('emits on peer-connection track and negotiationneeded', () => {

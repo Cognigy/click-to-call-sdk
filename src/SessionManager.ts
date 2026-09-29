@@ -162,7 +162,7 @@ export class SessionManager extends SDKEventEmitter {
 
 
 		// info messages
-		rtcSession.on('newInfo', this.handleNewInfo.bind(this));
+		rtcSession.on('newInfo', (data: any) => this.handleNewInfo(sessionState.id, data));
 
 		this.setupTransferHandlers(rtcSession);
 		this.setupIceHandler(rtcSession);
@@ -231,7 +231,7 @@ export class SessionManager extends SDKEventEmitter {
 		});
 	}
 
-	private handleNewInfo(data: any): void {
+	private handleNewInfo(sessionId: string, data: any): void {
 		const { originator, info } = data;
 		try {
 			if (originator === 'remote') {
@@ -239,7 +239,7 @@ export class SessionManager extends SDKEventEmitter {
 				// biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn needs Safari 15.4 / Chrome 93
 				if (Object.prototype.hasOwnProperty.call(parsedData, '_transcription')) {
 					// Emit transcription event and stop here - don't emit newInfo for transcription events
-					this.emit(COGNIGY_WEBRTC_EVENTS.TRANSCRIPTION, parsedData._transcription);
+					this.emit(COGNIGY_WEBRTC_EVENTS.TRANSCRIPTION, parsedData._transcription, sessionId);
 					return;
 				}
 			}
@@ -284,8 +284,8 @@ export class SessionManager extends SDKEventEmitter {
 	}
 
 	/**
-	 * Emit the peer connection's current remote/local audio streams (internal
-	 * event). A null pair is emitted once when the last audio track goes away.
+	 * Emit the peer connection's current remote/local audio streams and the
+	 * session id (internal event). A null pair is emitted once when the last audio track goes away.
 	 */
 	private emitStreams(sessionState: SessionState, pc: RTCPeerConnection): void {
 		const audioTracks = (items: Array<RTCRtpReceiver | RTCRtpSender>): MediaStreamTrack[] =>
@@ -303,7 +303,7 @@ export class SessionManager extends SDKEventEmitter {
 		} else if (!this.sessionsWithStreams.delete(sessionState.id)) {
 			return;
 		}
-		this.emit(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, remote, local);
+		this.emit(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, remote, local, sessionState.id);
 	}
 
 	/**
