@@ -5,7 +5,6 @@
 
 import { WebSocketInterface, UA } from 'jssip';
 import type { UA as IUA } from 'jssip';
-import type { UAEventMap } from 'jssip/lib/UA';
 import { SDKEventEmitter, COGNIGY_WEBRTC_EVENTS } from './utils/events.js';
 import type {
 	InternalClientConfig,
@@ -14,6 +13,7 @@ import type {
 	SipManagerState
 } from './types/internal.js';
 import { randomId } from './utils/helpers.js';
+import type { DisconnectedInfo, RegistrationFailedInfo } from './types/index.js';
 
 export class SipManager extends SDKEventEmitter {
 	private ua: IUA | null = null;
@@ -79,26 +79,27 @@ export class SipManager extends SDKEventEmitter {
 	private setupEventHandlers(): void {
 		if (!this.ua) return;
 
-		// Connection events
-		(['connecting', 'connected', 'disconnected'] as const).forEach((eventName) => {
-			this.ua?.on(eventName as keyof UAEventMap, (data: any) => {
-				console.log(`SIP ${eventName}:`, data);
+		this.ua.on('connecting', () => {
+			console.log('SIP connecting');
+			this.state.connecting = true;
+			this.emit(COGNIGY_WEBRTC_EVENTS.CONNECTING);
+		});
 
-				// Update state
-				if (eventName === 'connected') {
-					this.state.connected = true;
-					this.state.connecting = false;
-				} else if (eventName === 'disconnected') {
-					this.state.connected = false;
-					this.state.registered = false;
-					this.state.connecting = false;
-				} else if (eventName === 'connecting') {
-					this.state.connecting = true;
-				}
+		this.ua.on('connected', (data: any) => {
+			console.log('SIP connected:', data);
+			this.state.connected = true;
+			this.state.connecting = false;
+			this.emit(COGNIGY_WEBRTC_EVENTS.CONNECTED, data);
+		});
 
-				// Emit SDK event
-				this.emit(COGNIGY_WEBRTC_EVENTS[eventName.toUpperCase() as keyof typeof COGNIGY_WEBRTC_EVENTS], data);
-			});
+		this.ua.on('disconnected', (data: any) => {
+			console.log('SIP disconnected:', data);
+			this.state.connected = false;
+			this.state.registered = false;
+			this.state.connecting = false;
+			// Forward only code and reason, not the JsSIP socket
+			const info: DisconnectedInfo = { code: data?.code, reason: data?.reason };
+			this.emit(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, info);
 		});
 
 		// Registration events
@@ -125,6 +126,15 @@ export class SipManager extends SDKEventEmitter {
 		// Registration failure
 		this.ua.on('registrationFailed', (data: any) => {
 			console.error('SIP registration failed:', data);
+			// Map instead of forwarding the JsSIP response, which carries the whole message
+			const info: RegistrationFailedInfo = { cause: data.cause };
+			if (data.response) {
+				info.response = {
+					status_code: data.response.status_code,
+					reason_phrase: data.response.reason_phrase,
+				};
+			}
+			this.emit(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, info);
 			this.emit(COGNIGY_WEBRTC_EVENTS.ERROR, new Error(`Registration failed: ${data.cause}`));
 		});
 	}
