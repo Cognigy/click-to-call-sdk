@@ -1,6 +1,7 @@
 /**
  * Immutable call state snapshot store. Every change replaces the state
- * object and emits `stateChanged`.
+ * object and emits `stateChanged`. Snapshots, their transcript and its
+ * messages are frozen so consumers cannot corrupt the store.
  */
 
 import { SDKEventEmitter, COGNIGY_WEBRTC_EVENTS } from './utils/events.js';
@@ -9,15 +10,24 @@ import type { ClientState, TranscriptMessage } from './types/index.js';
 
 const TRANSCRIPT_DEDUPE_WINDOW_MS = 1000;
 
-const initialState = (): ClientState => ({
-	status: 'idle',
-	muted: false,
-	session: null,
-	endInfo: null,
-	transcript: [],
-	remoteStream: null,
-	localStream: null,
-});
+const freeze = (state: ClientState): ClientState => {
+	if (!Object.isFrozen(state.transcript)) {
+		const transcript = state.transcript.map((m) => (Object.isFrozen(m) ? m : Object.freeze({ ...m })));
+		state = { ...state, transcript: Object.freeze(transcript) };
+	}
+	return Object.freeze(state);
+};
+
+const initialState = (): ClientState =>
+	freeze({
+		status: 'idle',
+		muted: false,
+		session: null,
+		endInfo: null,
+		transcript: [],
+		remoteStream: null,
+		localStream: null,
+	});
 
 export class CallStateStore extends SDKEventEmitter {
 	private state: ClientState = initialState();
@@ -33,7 +43,7 @@ export class CallStateStore extends SDKEventEmitter {
 		if (!changed) {
 			return;
 		}
-		this.state = { ...this.state, ...patch };
+		this.state = freeze({ ...this.state, ...patch });
 		this.emit(COGNIGY_WEBRTC_EVENTS.STATE_CHANGED, this.state);
 	}
 
@@ -51,7 +61,7 @@ export class CallStateStore extends SDKEventEmitter {
 
 	addTranscription(t: { originator: TranscriptMessage['originator']; messages?: { text: string }[] }): void {
 		const now = Date.now();
-		const transcript = [...this.state.transcript];
+		const transcript: TranscriptMessage[] = [...this.state.transcript];
 		// Runs inside JsSIP's INFO handler: a malformed payload must not throw
 		for (const { text } of t.messages ?? []) {
 			const duplicate = transcript.some(

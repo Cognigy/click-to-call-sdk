@@ -102,4 +102,32 @@ describe('CallStateStore', () => {
 			localStream: null,
 		});
 	});
+	it('publishes frozen snapshots that callers cannot mutate', () => {
+		store.addTranscription({ originator: 'bot', messages: [{ text: 'hi' }] });
+		const snapshot = store.getState() as any;
+
+		expect(Object.isFrozen(snapshot)).toBe(true);
+		expect(Object.isFrozen(snapshot.transcript)).toBe(true);
+		expect(Object.isFrozen(snapshot.transcript[0])).toBe(true);
+		expect(() => {
+			snapshot.status = 'answered';
+		}).toThrow(TypeError);
+		expect(() => snapshot.transcript.push({ id: 'x', text: 'y', originator: 'user', timestamp: 0 })).toThrow(TypeError);
+		expect(() => {
+			snapshot.transcript[0].text = 'changed';
+		}).toThrow(TypeError);
+
+		expect(store.getState().status).toBe('idle');
+		expect(store.getState().transcript.map((m) => m.text)).toEqual(['hi']);
+	});
+
+	it('freezes the initial state and every update', () => {
+		expect(Object.isFrozen(store.getState())).toBe(true);
+		expect(Object.isFrozen(store.getState().transcript)).toBe(true);
+		store.update({ status: 'ringing' });
+		expect(Object.isFrozen(store.getState())).toBe(true);
+		store.startCall();
+		expect(Object.isFrozen(store.getState())).toBe(true);
+		expect(Object.isFrozen(store.getState().transcript)).toBe(true);
+	});
 });
