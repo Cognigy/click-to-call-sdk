@@ -136,6 +136,25 @@ describe('SipManager', () => {
 			expect(sipManager.isRegistered()).toBe(false);
 		});
 
+		it('ignores events from a UA it already stopped', () => {
+			sipManager.initialize(mockClientConfig, mockSettings);
+			const oldUA = sipManager.getUserAgent() as unknown as MockUA;
+			sipManager.stop();
+			sipManager.initialize(mockClientConfig, mockSettings);
+			const newUA = sipManager.getUserAgent() as unknown as MockUA;
+			newUA.emit('connected');
+			newUA.emit('registered');
+			const disconnected = vi.fn();
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, disconnected);
+
+			// JsSIP emits disconnected once the stopped UA's socket closes
+			oldUA.emit('disconnected', { code: 1000 });
+
+			expect(disconnected).not.toHaveBeenCalled();
+			expect(sipManager.isConnected()).toBe(true);
+			expect(sipManager.isRegistered()).toBe(true);
+		});
+
 		it('should handle stop when not initialized', () => {
 			expect(() => sipManager.stop()).not.toThrow();
 		});

@@ -112,6 +112,38 @@ describe('SessionManager', () => {
 			});
 		});
 
+		it('tracks local and remote hold', () => {
+			const updates: any[] = [];
+			manager.on(COGNIGY_WEBRTC_EVENTS.SESSION_UPDATED, (s) => updates.push(s));
+
+			ringing.emit('hold', { originator: 'local' });
+			ringing.emit('hold', { originator: 'remote' });
+			expect(updates.at(-1)).toMatchObject({ localHold: true, remoteHold: true });
+
+			ringing.emit('unhold', { originator: 'local' });
+			ringing.emit('unhold', { originator: 'remote' });
+			ringing.emit('unhold', { originator: 'system' });
+			expect(updates.at(-1)).toMatchObject({ localHold: false, remoteHold: false });
+		});
+
+		it('terminateAll terminates live sessions and keeps listeners', () => {
+			const ended = new MockRTCSession();
+			manager.createSession(ended as any);
+			ended.simulateEnded();
+			const listener = vi.fn();
+			manager.on(COGNIGY_WEBRTC_EVENTS.RINGING, listener);
+
+			manager.terminateAll();
+
+			expect(ringing.terminate).toHaveBeenCalled();
+			expect(ended.terminate).not.toHaveBeenCalled();
+			expect(manager.getRawSession()).toBeNull();
+			const next = new MockRTCSession();
+			manager.createSession(next as any);
+			next.simulateProgress();
+			expect(listener).toHaveBeenCalledTimes(1);
+		});
+
 		it('terminate throws when no session is live', () => {
 			ringing.simulateFailed();
 

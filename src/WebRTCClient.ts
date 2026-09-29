@@ -282,8 +282,8 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 			// Stop audio
 			this.audioManager.stopAudio();
 
-			// Terminate any active sessions
-			this.sessionManager.destroy();
+			// Keeps listeners: destroy() would drop the client's wiring for later calls
+			this.sessionManager.terminateAll();
 
 			// Stop SIP connection
 			this.sipManager.stop();

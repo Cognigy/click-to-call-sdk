@@ -555,18 +555,26 @@ export class SessionManager extends SDKEventEmitter {
 	}
 
 	/**
-	 * Clean up all sessions
+	 * Terminate every session that has not ended. Keeps listeners, so the
+	 * client's wiring survives disconnect() and serves the next call.
 	 */
-	destroy(): void {
-		// Terminate all active sessions
+	terminateAll(): void {
 		for (const sessionState of this.sessions.values()) {
-			if (sessionState.rtcSession && !sessionState.rtcSession.isEnded()) {
+			const ended = sessionState.status === 'ended' || sessionState.status === 'failed';
+			if (!ended && sessionState.rtcSession && !sessionState.rtcSession.isEnded()) {
 				sessionState.rtcSession.terminate();
 			}
 		}
 
 		this.sessions.clear();
 		this.activeSessionId = null;
+	}
+
+	/**
+	 * Terminate all sessions and remove all listeners
+	 */
+	destroy(): void {
+		this.terminateAll();
 		this.removeAllListeners();
 	}
 }
