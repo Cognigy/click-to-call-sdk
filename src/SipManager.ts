@@ -79,49 +79,55 @@ export class SipManager extends SDKEventEmitter {
 	private setupEventHandlers(): void {
 		const ua = this.ua;
 		if (!ua) return;
-		// A stopped UA keeps emitting (e.g. disconnected once its socket closes);
-		// those events must not touch the state of the UA that replaced it.
-		const on = (event: string, handler: (data: any) => void) => {
+		// A stopped UA keeps emitting (e.g. disconnected once its socket closes).
+		// Still forward those until a newer UA exists, but never let them touch
+		// state: it belongs to the current UA (or was reset by stop()).
+		const on = (event: string, handler: (data: any, current: boolean) => void) => {
 			ua.on(event as any, (data: any) => {
-				if (this.ua === ua) {
-					handler(data);
+				const current = this.ua === ua;
+				if (current || this.ua === null) {
+					handler(data, current);
 				}
 			});
 		};
 
-		on('connecting', () => {
+		on('connecting', (_data: any, current) => {
 			console.log('SIP connecting');
-			this.state.connecting = true;
+			if (current) this.state.connecting = true;
 			this.emit(COGNIGY_WEBRTC_EVENTS.CONNECTING);
 		});
 
-		on('connected', (data: any) => {
+		on('connected', (data: any, current) => {
 			console.log('SIP connected:', data);
-			this.state.connected = true;
-			this.state.connecting = false;
+			if (current) {
+				this.state.connected = true;
+				this.state.connecting = false;
+			}
 			this.emit(COGNIGY_WEBRTC_EVENTS.CONNECTED, data);
 		});
 
-		on('disconnected', (data: any) => {
+		on('disconnected', (data: any, current) => {
 			console.log('SIP disconnected:', data);
-			this.state.connected = false;
-			this.state.registered = false;
-			this.state.connecting = false;
+			if (current) {
+				this.state.connected = false;
+				this.state.registered = false;
+				this.state.connecting = false;
+			}
 			// Forward only code and reason, not the JsSIP socket
 			const info: DisconnectedInfo = { code: data?.code, reason: data?.reason };
 			this.emit(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, info);
 		});
 
 		// Registration events
-		on('registered', (data: any) => {
+		on('registered', (data: any, current) => {
 			console.log('SIP registered:', data);
-			this.state.registered = true;
+			if (current) this.state.registered = true;
 			this.emit(COGNIGY_WEBRTC_EVENTS.REGISTERED, data);
 		});
 
-		on('unregistered', (data: any) => {
+		on('unregistered', (data: any, current) => {
 			console.log('SIP unregistered:', data);
-			this.state.registered = false;
+			if (current) this.state.registered = false;
 			this.emit(COGNIGY_WEBRTC_EVENTS.UNREGISTERED, data);
 		});
 

@@ -155,6 +155,22 @@ describe('SipManager', () => {
 			expect(sipManager.isRegistered()).toBe(true);
 		});
 
+		it('still forwards a stopped UA\'s disconnected while no newer UA exists', () => {
+			sipManager.initialize(mockClientConfig, mockSettings);
+			const oldUA = sipManager.getUserAgent() as unknown as MockUA;
+			oldUA.emit('connected');
+			sipManager.stop();
+			const disconnected = vi.fn();
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, disconnected);
+			const stateBefore = sipManager.getState();
+
+			oldUA.emit('disconnected', { code: 1000, reason: 'Normal' });
+			oldUA.emit('registered');
+
+			expect(disconnected).toHaveBeenCalledWith({ code: 1000, reason: 'Normal' });
+			expect(sipManager.getState()).toEqual(stateBefore);
+		});
+
 		it('should handle stop when not initialized', () => {
 			expect(() => sipManager.stop()).not.toThrow();
 		});
