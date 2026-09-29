@@ -244,7 +244,7 @@ describe('WebRTCClient Integration Tests', () => {
 			const remote = {} as MediaStream;
 			const local = {} as MediaStream;
 			await startSession();
-			const { id } = client.getState().session!;
+			const id = client.getState().session?.id;
 			(client as any).sessionManager.emit(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, remote, local, id);
 			expect(client.getState().remoteStream).toBe(remote);
 			expect(client.getState().localStream).toBe(local);
