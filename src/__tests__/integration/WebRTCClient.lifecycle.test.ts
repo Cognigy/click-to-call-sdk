@@ -207,6 +207,21 @@ describe('WebRTCClient call lifecycle', () => {
 			expect(client.isConnected()).toBe(false);
 		});
 
+		it('connectAndCall rejects with the cancel when endCall lands after connect resolved', async () => {
+			create();
+			// Queued ahead of connectAndCall's own await on the same in-flight promise
+			void client.connect().then(() => client.endCall());
+			const p = client.connectAndCall();
+			const settled = expect(p).rejects.toThrow(/^Failed to connect: Canceled$/);
+
+			await vi.advanceTimersByTimeAsync(20);
+
+			await settled;
+			expect(lastUA().call).not.toHaveBeenCalled();
+			expect(client.getState().status).toBe('ended');
+			expect(client.getState().endInfo?.cause).toBe('Canceled');
+		});
+
 		it('endCall with a session terminates it with 480 Ended by user', async () => {
 			create();
 			const session = await ring();
