@@ -219,7 +219,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		});
 
 		this.sipManager.on('newRTCSession', (rtcSession) => {
-			// Create session in session manager
+			if (this.isDestroyed) return;
 			this.sessionManager.createSession(rtcSession);
 		});
 

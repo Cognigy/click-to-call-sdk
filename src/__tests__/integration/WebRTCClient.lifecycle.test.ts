@@ -261,6 +261,52 @@ describe('WebRTCClient call lifecycle', () => {
 			expect(client.isConnected()).toBe(false);
 		});
 
+		it('a late newRTCSession from a stopped UA creates no session and the next call dials', async () => {
+			create();
+			await connect();
+			await client.startCall();
+			// MockUA.call announces the session 10 ms later
+			const oldUA = lastUA();
+			await client.disconnect();
+			const created = vi.fn();
+			const states = vi.fn();
+			client.on('sessionCreated', created);
+			client.subscribe(states);
+
+			await vi.advanceTimersByTimeAsync(20);
+
+			expect(oldUA.getSessions()).toHaveLength(1);
+			expect(created).not.toHaveBeenCalled();
+			expect(states).not.toHaveBeenCalled();
+			expect(client.getRawSession()).toBeNull();
+
+			await connect();
+			await client.startCall();
+			await vi.advanceTimersByTimeAsync(20);
+			expect(lastUA()).not.toBe(oldUA);
+			expect(lastUA().call).toHaveBeenCalledTimes(1);
+			expect(client.getState().status).toBe('ringing');
+		});
+
+		it('a late registrationFailed from a stopped UA emits nothing publicly', async () => {
+			create();
+			await connect();
+			const oldUA = lastUA();
+			await client.disconnect();
+			const registrationFailed = vi.fn();
+			const error = vi.fn();
+			const states = vi.fn();
+			client.on('registrationFailed', registrationFailed);
+			client.on('error', error);
+			client.subscribe(states);
+
+			oldUA.emit('registrationFailed', { cause: 'Connection Error' });
+
+			expect(registrationFailed).not.toHaveBeenCalled();
+			expect(error).not.toHaveBeenCalled();
+			expect(states).not.toHaveBeenCalled();
+		});
+
 		it('ignores disconnected from a UA that was already stopped', async () => {
 			create({ disconnectAfterCall: true });
 			const first = await ring();

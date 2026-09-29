@@ -171,6 +171,24 @@ describe('SipManager', () => {
 			expect(sipManager.getState()).toEqual(stateBefore);
 		});
 
+		it('drops a stopped UA\'s session and registration events even with no newer UA', () => {
+			sipManager.initialize(mockClientConfig, mockSettings);
+			const oldUA = sipManager.getUserAgent() as unknown as MockUA;
+			sipManager.stop();
+			const spy = vi.fn();
+			for (const event of ['connecting', 'connected', 'registered', 'newRTCSession', 'registrationFailed', 'error']) {
+				sipManager.on(event, () => spy(event));
+			}
+
+			oldUA.emit('connecting');
+			oldUA.emit('connected');
+			oldUA.emit('registered');
+			oldUA.emit('newRTCSession', { session: { data: {} } });
+			oldUA.emit('registrationFailed', { cause: 'Connection Error' });
+
+			expect(spy).not.toHaveBeenCalled();
+		});
+
 		it('should handle stop when not initialized', () => {
 			expect(() => sipManager.stop()).not.toThrow();
 		});
