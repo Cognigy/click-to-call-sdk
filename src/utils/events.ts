@@ -103,6 +103,8 @@ export const COGNIGY_WEBRTC_EVENTS = {
 	SESSION_CREATED: 'sessionCreated',
 	SESSION_UPDATED: 'sessionUpdated',
 	SESSION_DESTROYED: 'sessionDestroyed',
+	/** (remote: MediaStream | null, local: MediaStream | null) */
+	STREAMS_CHANGED: 'streamsChanged',
 
 	INFO_RECEIVED: 'infoReceived',
 	TRANSCRIPTION: 'transcription',

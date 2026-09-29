@@ -27,6 +27,7 @@ export type {
 	DisconnectedInfo,
 	SendDTMFOptions,
 } from './types/index.js';
+export type { ExtendedRTCSession } from './types/internal.js';
 
 // Export main client class
 export { WebRTCClient };

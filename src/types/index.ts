@@ -2,6 +2,8 @@
  * Public API types for the WebRTC SDK
  */
 
+import type { ExtendedRTCSession } from './internal.js';
+
 // Configuration types
 export interface EndpointConfig {
 	organisationId: string;
@@ -122,6 +124,7 @@ export interface WebRTCClientEvents {
 	'registered': () => void;
 	'unregistered': () => void;
 	'registrationFailed': (info: RegistrationFailedInfo) => void;
+	'sessionCreated': (session: CallSession) => void;
 	'ringing': (session: CallSession) => void;
 	'answered': (session: CallSession) => void;
 	'ended': (session: CallSession, endInfo: CallEndInfo) => void;
@@ -168,6 +171,8 @@ export interface WebRTCClient {
 	// State getters
 	isConnected(): boolean;
 	getCurrentSession(): CallSession | null;
+	/** Advanced/unstable: underlying JsSIP session. */
+	getRawSession(): ExtendedRTCSession | null;
 
 	// Lifecycle
 	connect(): Promise<void>;
