@@ -485,7 +485,8 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	/**
 	 * Start a call. No-op while a session is live. On a connected client after
 	 * an earlier call (no new connect()), resets the state and arms the setup
-	 * timer like connect() does.
+	 * timer like connect() does. Does not re-check registration: connect()
+	 * already waited for it, and JsSIP dials and reconnects the transport itself.
 	 */
 	async startCall(): Promise<void> {
 		if (!this.isInitialized) {
@@ -494,10 +495,6 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 
 		if (this.sessionManager.getRawSession()) {
 			return;
-		}
-
-		if (this.sipManager.needsRegistration() && !this.sipManager.isRegistered()) {
-			throw new Error('SIP client not registered');
 		}
 
 		if (this.callStateStore.getState().status !== 'connecting') {

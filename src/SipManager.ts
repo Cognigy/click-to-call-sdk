@@ -225,10 +225,6 @@ export class SipManager extends SDKEventEmitter {
 			throw new Error('SIP manager not initialized');
 		}
 
-		if (this.requiresRegistration && !this.state.registered) {
-			throw new Error('SIP client not registered');
-		}
-
 		console.log(`Making call to: ${number}`);
 
 		try {
