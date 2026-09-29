@@ -155,14 +155,14 @@ init → ringing → answered → ended
 
 ### CallStateStore (`src/CallStateStore.ts`)
 
-Holds the immutable `ClientState` snapshot (`status`, `muted`, `session`, `endInfo`, `transcript`, `remoteStream`, `localStream`).
+Holds the immutable `ClientState` snapshot (`status`, `muted`, `session`, `endInfo`, `transcript`, `remoteStream`, `localStream`). Each snapshot, its transcript and messages are frozen.
 
 **Responsibilities:**
 
 - `update(patch)` replaces the state object and emits `stateChanged` only when a field actually changed.
 - `startCall()` resets the state to `connecting`.
 - `addTranscription()` appends transcript messages, dropping duplicates (same text and originator within 1s), and tolerates malformed payloads.
-- `WebRTCClient` feeds it from session events and forwards `stateChanged` to consumers (`getState()` / `subscribe()`).
+- `WebRTCClient` feeds it from session events of the current session only (lifecycle, `sessionUpdated` for mute/hold, and the session-tagged internal `transcription` / `streamsChanged` events) and forwards `stateChanged` to consumers (`getState()` / `subscribe()`). Streams are cleared when the current session ends or fails.
 
 ### AudioManager (`src/AudioManager.ts`)
 

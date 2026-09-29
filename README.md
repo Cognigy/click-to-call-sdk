@@ -126,18 +126,18 @@ interface WebRTCClientConfig {
 ## Call state
 
 `getState()` returns an immutable `ClientState` snapshot; every change produces a new object and emits
-`stateChanged`. `subscribe()` wraps that event and returns an unsubscribe function. It does not fire
+`stateChanged`. Snapshots, `transcript` and its messages are frozen, so copy before modifying. `subscribe()` wraps that event and returns an unsubscribe function. It does not fire
 immediately, so read `getState()` for the initial value.
 
 ```typescript
 interface ClientState {
-  status: 'idle' | 'connecting' | 'ringing' | 'answered' | 'ended' | 'failed';
-  muted: boolean;
-  session: CallSession | null;
-  endInfo: CallEndInfo | null;      // set when status is 'ended' or 'failed'
-  transcript: TranscriptMessage[];  // { id, text, originator: 'bot' | 'user', timestamp }
-  remoteStream: MediaStream | null;
-  localStream: MediaStream | null;
+  readonly status: 'idle' | 'connecting' | 'ringing' | 'answered' | 'ended' | 'failed';
+  readonly muted: boolean;
+  readonly session: CallSession | null;         // includes mute and hold flags
+  readonly endInfo: CallEndInfo | null;         // set when status is 'ended' or 'failed'
+  readonly transcript: readonly TranscriptMessage[]; // { id, text, originator: 'bot' | 'user', timestamp }
+  readonly remoteStream: MediaStream | null;    // null once the call ends or fails
+  readonly localStream: MediaStream | null;
 }
 ```
 
