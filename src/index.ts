@@ -26,8 +26,11 @@ export type {
 	RegistrationFailedInfo,
 	DisconnectedInfo,
 	SendDTMFOptions,
+	CallStatus,
+	TranscriptMessage,
+	ClientState,
+	ExtendedRTCSession,
 } from './types/index.js';
-export type { ExtendedRTCSession } from './types/internal.js';
 
 // Export main client class
 export { WebRTCClient };

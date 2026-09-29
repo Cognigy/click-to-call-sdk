@@ -96,6 +96,9 @@ export const COGNIGY_WEBRTC_EVENTS = {
 	INFO_SENT: 'infoSent',
 	DTMF_SENT: 'dtmfSent',
 
+	// State events
+	STATE_CHANGED: 'stateChanged',
+
 	// Error events
 	ERROR: 'error',
 
