@@ -237,12 +237,11 @@ describe('SipManager', () => {
 			expect(() => sipManager.call('123')).toThrow('SIP manager not initialized');
 		});
 
-		it('should throw error if not registered', () => {
-			// Mock unregistered state
-			mockUA.isRegistered = vi.fn(() => false);
+		it('should dial even when not registered (JsSIP handles auth and reconnects)', () => {
 			(sipManager as any).state.registered = false;
 
-			expect(() => sipManager.call('123')).toThrow('SIP client not registered');
+			expect(() => sipManager.call('123')).not.toThrow();
+			expect(mockUA.call).toHaveBeenCalledTimes(1);
 		});
 
 		it('should emit error event on call failure', async() => {

@@ -244,6 +244,23 @@ describe('WebRTCClient call lifecycle', () => {
 			expect(lastUA().stop).not.toHaveBeenCalled();
 		});
 
+		it('startCall after a transport drop before the session still dials', async () => {
+			create();
+			await connect();
+			const dial = lastUA().call;
+
+			lastUA().emit('disconnected', { code: 1006 });
+			await expect(client.startCall()).resolves.toBeUndefined();
+			await vi.advanceTimersByTimeAsync(20);
+
+			expect(dial).toHaveBeenCalledTimes(1);
+			expect(dial).toHaveBeenCalledWith(
+				expect.any(String),
+				expect.objectContaining({ extraHeaders: expect.arrayContaining(['X-Source: webrtc']) })
+			);
+			expect(client.getState().status).toBe('ringing');
+		});
+
 		it('still emits disconnected after disconnect() without changing state', async () => {
 			create();
 			await connect();
@@ -530,6 +547,24 @@ describe('WebRTCClient call lifecycle', () => {
 			});
 			expect(client.getState().status).toBe('failed');
 			expect(client.getState().endInfo).toEqual({ originator: null, cause: 'REGISTRATION_FAILED', description: null });
+		});
+
+		it('connect on a legacy endpoint waits for registration', async () => {
+			create();
+			let settled = false;
+			const p = client.connect().then(() => {
+				settled = true;
+			});
+
+			// MockUA: connected at 10 ms, registered at 15 ms
+			await vi.advanceTimersByTimeAsync(12);
+			expect(lastUA().isRegistered()).toBe(false);
+			expect(settled).toBe(false);
+
+			await vi.advanceTimersByTimeAsync(10);
+			await p;
+			expect(settled).toBe(true);
+			expect(lastUA().isRegistered()).toBe(true);
 		});
 
 		it('stops the UA after a failed connect so setUserId and reconnect work', async () => {
