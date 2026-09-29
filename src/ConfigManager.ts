@@ -11,6 +11,8 @@ export class ConfigManager {
 	private userId: string;
 	private userProvidedId: boolean;
 	private inFlight: Promise<EndpointConfig> | null = null;
+	/** Bumped by clearConfig(); a response from an older generation is not cached. */
+	private generation = 0;
 
 	constructor(endpointUrl: string, userId?: string) {
 		this.endpointUrl = endpointUrl;
@@ -30,7 +32,7 @@ export class ConfigManager {
 			return this.inFlight;
 		}
 
-		const request = this.requestConfig().finally(() => {
+		const request = this.requestConfig(this.generation).finally(() => {
 			// clearConfig() may have replaced this request already
 			if (this.inFlight === request) {
 				this.inFlight = null;
@@ -40,7 +42,7 @@ export class ConfigManager {
 		return request;
 	}
 
-	private async requestConfig(): Promise<EndpointConfig> {
+	private async requestConfig(generation: number): Promise<EndpointConfig> {
 		try {
 			const response = await withTimeout(
 				fetch(this.endpointUrl, {
@@ -55,6 +57,10 @@ export class ConfigManager {
 
 			const config = await response.json();
 
+			// Cleared while in flight: hand the result back, don't cache it
+			if (generation !== this.generation) {
+				return config;
+			}
 			this.config = config;
 
 			if (!this.userProvidedId) {
@@ -175,6 +181,7 @@ export class ConfigManager {
 	clearConfig(): void {
 		this.config = null;
 		this.inFlight = null;
+		this.generation++;
 	}
 
 	/**
