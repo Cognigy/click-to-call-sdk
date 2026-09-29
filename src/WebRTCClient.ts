@@ -125,10 +125,13 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		sm.on(COGNIGY_WEBRTC_EVENTS.UNMUTED, (session) => {
 			if (isCurrent(session)) store.update({ muted: false });
 		});
-		sm.on(COGNIGY_WEBRTC_EVENTS.TRANSCRIPTION, (info) => store.addTranscription(info));
-		sm.on(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, (remoteStream, localStream) =>
-			store.update({ remoteStream, localStream })
-		);
+		// Keyed by session id: a replaced or ended session must not leak into the next call
+		sm.on(COGNIGY_WEBRTC_EVENTS.TRANSCRIPTION, (info, sessionId: string) => {
+			if (sessionId === this.currentSessionId) store.addTranscription(info);
+		});
+		sm.on(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, (remoteStream, localStream, sessionId: string) => {
+			if (sessionId === this.currentSessionId) store.update({ remoteStream, localStream });
+		});
 
 		// Transport lost mid-call. Before a session exists JsSIP is still
 		// connecting or reconnecting, and the setup timer covers that.
