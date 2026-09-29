@@ -43,7 +43,8 @@ export class SDKEventEmitter extends NodeEventEmitter implements EventEmitter {
 	 * Remove all listeners for an event or all events
 	 */
 	removeAllListeners(event?: string): this {
-		return super.removeAllListeners(event);
+		// EventEmitter checks arguments.length: an explicit undefined removes nothing
+		return event === undefined ? super.removeAllListeners() : super.removeAllListeners(event);
 	}
 
 	/**
