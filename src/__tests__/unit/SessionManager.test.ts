@@ -201,6 +201,28 @@ describe('SessionManager', () => {
 		});
 	});
 
+	describe('newInfo', () => {
+		it('emits transcription without Object.hasOwn (pre-ES2022 browsers)', () => {
+			const hasOwn = Object.hasOwn;
+			const transcription = vi.fn();
+			const infoReceived = vi.fn();
+			sessionManager.on(COGNIGY_WEBRTC_EVENTS.TRANSCRIPTION, transcription);
+			sessionManager.on(COGNIGY_WEBRTC_EVENTS.INFO_RECEIVED, infoReceived);
+			delete (Object as any).hasOwn;
+			try {
+				rtcSession.emit('newInfo', {
+					originator: 'remote',
+					info: { body: JSON.stringify({ _transcription: { messages: [] } }) },
+				});
+			} finally {
+				Object.hasOwn = hasOwn;
+			}
+
+			expect(transcription).toHaveBeenCalledWith({ messages: [] });
+			expect(infoReceived).not.toHaveBeenCalled();
+		});
+	});
+
 	describe('createSession', () => {
 		it('does not create or announce the same rtc session twice', () => {
 			const createdSpy = vi.fn();
