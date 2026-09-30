@@ -9,7 +9,10 @@ export class ConfigManager {
 	private config: EndpointConfig | null = null;
 	private readonly endpointUrl: string;
 	private userId: string;
-	private readonly userProvidedId: boolean;
+	private userProvidedId: boolean;
+	private inFlight: Promise<EndpointConfig> | null = null;
+	/** Bumped by clearConfig(); a response from an older generation is not cached. */
+	private generation = 0;
 
 	constructor(endpointUrl: string, userId?: string) {
 		this.endpointUrl = endpointUrl;
@@ -18,20 +21,32 @@ export class ConfigManager {
 	}
 
 	/**
-	 * Fetch configuration from the endpoint
+	 * Fetch configuration from the endpoint. Cached on success; concurrent calls
+	 * share one request. Does not validate SIP fields, see assertCallable().
 	 */
-	async fetchConfig(): Promise<EndpointConfig> {
+	fetchConfig(): Promise<EndpointConfig> {
 		if (this.config) {
-			return this.config;
+			return Promise.resolve(this.config);
+		}
+		if (this.inFlight) {
+			return this.inFlight;
 		}
 
+		const request = this.requestConfig(this.generation).finally(() => {
+			// clearConfig() may have replaced this request already
+			if (this.inFlight === request) {
+				this.inFlight = null;
+			}
+		});
+		this.inFlight = request;
+		return request;
+	}
+
+	private async requestConfig(generation: number): Promise<EndpointConfig> {
 		try {
 			const response = await withTimeout(
 				fetch(this.endpointUrl, {
 					method: 'GET',
-					headers: {
-						'Content-Type': 'application/json',
-					},
 				}),
 				10000 // 10 second timeout
 			);
@@ -42,14 +57,14 @@ export class ConfigManager {
 
 			const config = await response.json();
 
-			if (!validateEndpointConfig(config)) {
-				throw new Error('Invalid endpoint configuration received');
+			// Cleared while in flight: hand the result back, don't cache it
+			if (generation !== this.generation) {
+				return config;
 			}
-
 			this.config = config;
 
 			if (!this.userProvidedId) {
-				const originalEndpointName = config.endpointSettings?.endpointName || '';
+				const originalEndpointName = config?.endpointSettings?.endpointName || '';
 				const endpointName = originalEndpointName.replace(/[^a-zA-Z0-9-]/g, '').toLowerCase() || 'endpoint';
 				this.userId = `webrtc-sdk-${endpointName}-${randomId()}`;
 			}
@@ -57,6 +72,27 @@ export class ConfigManager {
 			return config;
 		} catch (error) {
 			throw new Error(`Configuration fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+		}
+	}
+
+	/**
+	 * Override the SIP user id. Wins over the constructor value and over the
+	 * id generated during fetch.
+	 */
+	setUserId(id: string): void {
+		if (!id) {
+			throw new Error('userId must be a non-empty string');
+		}
+		this.userId = id;
+		this.userProvidedId = true;
+	}
+
+	/**
+	 * Throw unless the loaded config has what a SIP connection needs.
+	 */
+	assertCallable(): void {
+		if (!this.config || !validateEndpointConfig(this.config)) {
+			throw new Error('Invalid endpoint configuration received');
 		}
 	}
 
@@ -144,6 +180,8 @@ export class ConfigManager {
 	 */
 	clearConfig(): void {
 		this.config = null;
+		this.inFlight = null;
+		this.generation++;
 	}
 
 	/**
