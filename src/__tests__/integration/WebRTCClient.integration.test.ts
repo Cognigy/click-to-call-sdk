@@ -292,6 +292,26 @@ describe('WebRTCClient Integration Tests', () => {
 
 				expect(client.getState()).toMatchObject({ status: outcome, remoteStream: null, localStream: null });
 			});
+
+			it(`ignores late events from a session that ${outcome}`, async () => {
+				await client.startCall();
+				await new Promise((resolve) => setTimeout(resolve, 20));
+				const session = mockUA.getLastSession();
+				session.simulatePeerConnection();
+				const pc = session._connection;
+				pc.getReceivers.mockReturnValue([{ track: { id: 'r1', kind: 'audio' } }]);
+				session.simulateAccepted();
+
+				if (outcome === 'ended') session.simulateEnded();
+				else session.simulateFailed();
+				const terminal = client.getState();
+
+				session.emit('newInfo', transcriptionInfo('late'));
+				pc.dispatch('negotiationneeded');
+				session.emit('muted', { audio: true });
+
+				expect(client.getState()).toBe(terminal);
+			});
 		}
 
 		it('keeps state.session in sync on mute and hold without changing status', async () => {
