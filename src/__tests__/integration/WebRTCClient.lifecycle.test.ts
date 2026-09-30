@@ -353,6 +353,64 @@ describe('WebRTCClient call lifecycle', () => {
 		});
 	});
 
+	describe('public lifecycle events see the current state', () => {
+		it.each([false, true])('ringing/answered/ended see their own status (disconnectAfterCall: %s)', async (disconnectAfterCall) => {
+			create({ disconnectAfterCall });
+			const seen: [string, string][] = [];
+			for (const event of ['ringing', 'answered', 'ended'] as const) {
+				client.on(event, () => seen.push([event, client.getState().status]));
+			}
+			const ended = vi.fn();
+			client.on('ended', ended);
+
+			const session = await ring();
+			session.simulateAccepted();
+			session.simulateEnded();
+
+			expect(seen).toEqual([
+				['ringing', 'ringing'],
+				['answered', 'answered'],
+				['ended', 'ended'],
+			]);
+			expect(ended).toHaveBeenCalledTimes(1);
+			expect(ended.mock.calls[0][1]).toEqual(client.getState().endInfo);
+			expect(ended.mock.calls[0][1]).toMatchObject({ originator: 'local', cause: 'BYE' });
+			expect(lastUA().stop).toHaveBeenCalledTimes(disconnectAfterCall ? 1 : 0);
+		});
+
+		it.each([false, true])('failed sees its own status (disconnectAfterCall: %s)', async (disconnectAfterCall) => {
+			create({ disconnectAfterCall });
+			const failed = vi.fn(() => client.getState().status);
+			client.on('failed', failed);
+
+			const session = await ring();
+			session.simulateFailed();
+
+			expect(failed).toHaveBeenCalledTimes(1);
+			expect(failed.mock.results[0].value).toBe('failed');
+			expect(failed.mock.calls[0][1]).toEqual(client.getState().endInfo);
+			expect(failed.mock.calls[0][1]).toMatchObject({ originator: 'remote', cause: 'Request Timeout' });
+			expect(lastUA().stop).toHaveBeenCalledTimes(disconnectAfterCall ? 1 : 0);
+		});
+		it('connect() from a public ended listener is not aborted by the auto-disconnect', async () => {
+			create({ disconnectAfterCall: true });
+			const first = await ring();
+			let next: Promise<void> | null = null;
+			client.on('ended', () => {
+				next = client.connect();
+			});
+
+			first.simulateEnded();
+			expect(next).not.toBeNull();
+			await vi.advanceTimersByTimeAsync(20);
+			await next;
+
+			expect(ua.instances).toHaveLength(2);
+			expect(client.isConnected()).toBe(true);
+			expect(client.getState().status).toBe('connecting');
+		});
+	});
+
 	describe('disconnectAfterCall and re-calls', () => {
 		it('second call after disconnectAfterCall emits events again', async () => {
 			create({ disconnectAfterCall: true });
