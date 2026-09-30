@@ -327,10 +327,15 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	}
 
 	/**
-	 * Set the SIP user id. The UA is created from it, so it is locked once the
-	 * UA exists (connect in progress or completed, until disconnect).
+	 * Set the SIP user id. The UA is created from it, so it is locked from the
+	 * start of connect() until that attempt fails or is cancelled, or until
+	 * disconnect() after it succeeded.
 	 */
 	setUserId(id: string): void {
+		// Covers the config fetch, before any UA exists
+		if (this.abortConnect) {
+			throw new Error('Cannot change userId while connecting');
+		}
 		if (this.sipManager.getUserAgent()) {
 			throw new Error('Cannot change userId while connected');
 		}

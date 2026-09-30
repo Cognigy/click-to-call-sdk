@@ -696,6 +696,33 @@ describe('WebRTCClient call lifecycle', () => {
 			expect(() => client.setUserId('webrtc-after-cancel')).not.toThrow();
 		});
 
+		it('setUserId throws while connect() is fetching the config, and works after it fails', async () => {
+			let rejectFetch!: (error: Error) => void;
+			global.fetch = vi.fn(() => new Promise((_, reject) => (rejectFetch = reject))) as any;
+			create();
+			const p = client.connect();
+			const settled = expect(p).rejects.toThrow(/^Failed to connect/);
+
+			expect((client as any).sipManager.getUserAgent()).toBeNull();
+			expect(() => client.setUserId('webrtc-during-fetch')).toThrow('Cannot change userId while connecting');
+
+			rejectFetch(new Error('offline'));
+			await settled;
+			expect(() => client.setUserId('webrtc-after-failure')).not.toThrow();
+		});
+
+		it('setUserId works again after a connect cancelled during the config fetch', async () => {
+			global.fetch = vi.fn(() => new Promise(() => undefined)) as any;
+			create();
+			const p = client.connect();
+			const settled = expect(p).rejects.toThrow(/^Failed to connect: Canceled/);
+			expect(() => client.setUserId('x')).toThrow('Cannot change userId while connecting');
+
+			await client.endCall();
+			await settled;
+			expect(() => client.setUserId('x')).not.toThrow();
+		});
+
 		it('disconnect stops a UA left behind while connecting', async () => {
 			create();
 			const p = client.connect();
