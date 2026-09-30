@@ -59,19 +59,31 @@ export class CallStateStore extends SDKEventEmitter {
 		});
 	}
 
-	addTranscription(t: { originator: TranscriptMessage['originator']; messages?: { text: string }[] }): void {
+	/** Remote JSON, handled inside JsSIP's INFO handler: validate, never throw. */
+	addTranscription(t: unknown): void {
+		const payload = t as { originator?: unknown; messages?: unknown } | null;
+		if (!payload || (payload.originator !== 'bot' && payload.originator !== 'user')) {
+			return;
+		}
+		if (!Array.isArray(payload.messages)) {
+			return;
+		}
+		const originator = payload.originator;
 		const now = Date.now();
 		const transcript: TranscriptMessage[] = [...this.state.transcript];
-		// Runs inside JsSIP's INFO handler: a malformed payload must not throw
-		for (const { text } of t.messages ?? []) {
+		for (const message of payload.messages) {
+			const text: unknown = message?.text;
+			if (typeof text !== 'string') {
+				continue;
+			}
 			const duplicate = transcript.some(
 				(m) =>
 					m.text === text &&
-					m.originator === t.originator &&
+					m.originator === originator &&
 					Math.abs(now - m.timestamp) < TRANSCRIPT_DEDUPE_WINDOW_MS
 			);
 			if (!duplicate) {
-				transcript.push({ id: randomId('msg'), text, originator: t.originator, timestamp: now });
+				transcript.push({ id: randomId('msg'), text, originator, timestamp: now });
 			}
 		}
 		if (transcript.length !== this.state.transcript.length) {
