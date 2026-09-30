@@ -71,13 +71,14 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 			this.audioManager.setCaptureAudio(true);
 		}
 
-		this.setupEventHandlers();
+		// State first, so getState() is current inside public event listeners
 		this.setupStateHandlers();
+		this.setupEventHandlers();
 	}
 
 	/**
 	 * Feed the state store from session events. Registered on the internal
-	 * managers, independent of the public forwarding above.
+	 * managers before the public forwarding.
 	 */
 	private setupStateHandlers(): void {
 		const store = this.callStateStore;
