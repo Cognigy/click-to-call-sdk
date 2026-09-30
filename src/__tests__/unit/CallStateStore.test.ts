@@ -79,6 +79,25 @@ describe('CallStateStore', () => {
 		expect(store.getState().transcript).toEqual([]);
 	});
 
+	it('skips malformed transcription messages and keeps the valid ones', () => {
+		const messages = [null, { text: 42 }, {}, 'str', { text: 'ok' }, undefined];
+		expect(() => store.addTranscription({ originator: 'bot', messages } as any)).not.toThrow();
+		expect(store.getState().transcript.map((m) => m.text)).toEqual(['ok']);
+	});
+
+	it.each([
+		['an unknown originator', { originator: 'agent', messages: [{ text: 'x' }] }],
+		['a missing originator', { messages: [{ text: 'x' }] }],
+		['non-array messages', { originator: 'bot', messages: { text: 'x' } }],
+		['a null payload', null],
+	])('ignores a payload with %s', (_name, payload) => {
+		const spy = vi.fn();
+		store.on(COGNIGY_WEBRTC_EVENTS.STATE_CHANGED, spy);
+		expect(() => store.addTranscription(payload as any)).not.toThrow();
+		expect(store.getState().transcript).toEqual([]);
+		expect(spy).not.toHaveBeenCalled();
+	});
+
 	it('clears transcript and endInfo on startCall', () => {
 		store.addTranscription({ originator: 'user', messages: [{ text: 'x' }] });
 		store.update({
