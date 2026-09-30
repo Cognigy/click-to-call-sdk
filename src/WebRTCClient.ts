@@ -306,7 +306,8 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 
 	/**
 	 * EventEmitter throws on an unhandled 'error', which would surface inside
-	 * JsSIP's callbacks. Failures also reach the state and connect()'s rejection.
+	 * JsSIP's callbacks. Connection/setup failures also reach the state and
+	 * connect()'s rejection; other errors (e.g. audio playback) only surface here.
 	 */
 	private emitError(error: Error): void {
 		if (this.listenerCount(COGNIGY_WEBRTC_EVENTS.ERROR) > 0) {

@@ -120,8 +120,9 @@ interface WebRTCClientConfig {
 | `stateChanged`  | `(state: ClientState)`                                                  |
 | `error`         | `(error: Error)`                                                        |
 
-> **Note:** `error` is only emitted while a listener is registered. Failures also land in `getState().endInfo`
-> and reject `connect()`.
+> **Note:** `error` is only emitted while a listener is registered. Connection and setup failures (config,
+> registration, transport) also land in `getState().endInfo` and reject `connect()`; other errors, such as
+> audio playback failures, are only reported through `error`.
 
 ## Call state
 
