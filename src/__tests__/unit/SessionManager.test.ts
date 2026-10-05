@@ -283,93 +283,24 @@ describe('SessionManager', () => {
 		});
 	});
 
+	// Transfers have no UI; accepting Replaces would open the microphone unprompted.
 	describe('REFER and replaces', () => {
-		it('accepts REFER and hands the new session to createSession', () => {
-			const onNewSession = vi.fn();
-			const pcConfig = { iceServers: [{ urls: 'stun:example.org' }] };
-			const manager = new SessionManager(pcConfig, onNewSession);
+		it.each([
+			['REFER', (rtc: MockRTCSession) => rtc.simulateRefer()],
+			['replaces', (rtc: MockRTCSession) => rtc.simulateReplaces()],
+		])('rejects an inbound %s', (_name, fire) => {
+			const manager = new SessionManager();
+			const onCreated = vi.fn();
+			manager.on('sessionCreated', onCreated);
 			const rtc = new MockRTCSession();
 			manager.createSession(rtc as any);
+			onCreated.mockClear();
 
-			const data = rtc.simulateRefer(true);
+			const data = fire(rtc);
 
-			expect(data.accept).toHaveBeenCalledTimes(1);
-			const [initCallback, options] = data.accept.mock.calls[0];
-			expect(options).toEqual({
-				mediaConstraints: { audio: true, video: false },
-				pcConfig,
-			});
-
-			const referred = new MockRTCSession();
-			initCallback(referred);
-
-			expect(referred.data.replaces).toBe(true);
-			expect(onNewSession).toHaveBeenCalledWith(referred);
-			manager.destroy();
-		});
-
-		it('does not flag a REFER without a replaces header', () => {
-			const onNewSession = vi.fn();
-			const manager = new SessionManager(undefined, onNewSession);
-			const rtc = new MockRTCSession();
-			manager.createSession(rtc as any);
-
-			const data = rtc.simulateRefer(false);
-			const referred = new MockRTCSession();
-			data.accept.mock.calls[0][0](referred);
-
-			expect(referred.data.replaces).toBeUndefined();
-			expect(onNewSession).toHaveBeenCalledWith(referred);
-			manager.destroy();
-		});
-
-		it('still accepts a REFER without refer_to', () => {
-			const onNewSession = vi.fn();
-			const manager = new SessionManager(undefined, onNewSession);
-			const rtc = new MockRTCSession();
-			manager.createSession(rtc as any);
-			const data = { request: {}, accept: vi.fn(), reject: vi.fn() };
-			rtc.emit('refer', data);
-
-			const referred = new MockRTCSession();
-			expect(() => data.accept.mock.calls[0][0](referred)).not.toThrow();
-
-			expect(referred.data.replaces).toBeUndefined();
-			expect(onNewSession).toHaveBeenCalledWith(referred);
-			manager.destroy();
-		});
-
-		it('auto-answers a replaces session that is not established', () => {
-			const onNewSession = vi.fn();
-			const pcConfig = { iceServers: [] };
-			const manager = new SessionManager(pcConfig, onNewSession);
-			const rtc = new MockRTCSession();
-			manager.createSession(rtc as any);
-
-			const data = rtc.simulateReplaces();
-			const replacing = new MockRTCSession('incoming');
-			replacing.isEstablished.mockReturnValue(false);
-			data.accept.mock.calls[0][0](replacing);
-
-			expect(replacing.data.replaces).toBe(true);
-			expect(onNewSession).toHaveBeenCalledWith(replacing);
-			expect(replacing.answer).toHaveBeenCalledWith({
-				mediaConstraints: { audio: true, video: false },
-				pcConfig,
-			});
-			manager.destroy();
-		});
-
-		it('does not answer a replaces session that is already established', () => {
-			const manager = new SessionManager(undefined, vi.fn());
-			const rtc = new MockRTCSession();
-			manager.createSession(rtc as any);
-
-			const data = rtc.simulateReplaces();
-			const replacing = new MockRTCSession('incoming');
-			data.accept.mock.calls[0][0](replacing);
-
-			expect(replacing.answer).not.toHaveBeenCalled();
+			expect(data.reject).toHaveBeenCalledTimes(1);
+			expect(data.accept).not.toHaveBeenCalled();
+			expect(onCreated).not.toHaveBeenCalled();
 			manager.destroy();
 		});
 	});
