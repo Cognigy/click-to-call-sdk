@@ -76,6 +76,7 @@ export class ConfigManager {
 		}
 
 		const sipInfo = this.config.endpointSettings.sipConnectivityInfo;
+		const runtime = this.isRuntimeEndpoint();
 
 		return {
 			fullUsername: `${this.userId ?? ''}@${sipInfo.realm}`,
@@ -87,8 +88,26 @@ export class ConfigManager {
 			realm: sipInfo.realm,
 			organisationId: this.config.organisationId,
 			projectId: this.config.projectId,
-			endpointId: this.config.endpointSettings.endpointId,
+			// Declared only for runtime endpoints: the SIP layer reads it as "skip REGISTER,
+			// admit by declared identity", which a legacy endpoint can't be resolved by.
+			endpointId: runtime ? this.config.endpointSettings.endpointId : undefined,
 		};
+	}
+
+	/**
+	 * The endpoint handshake returns organisationId/projectId/endpointId for every endpoint,
+	 * legacy ones included. Only runtime endpoints lack the SIP realm credentials, and only
+	 * they are resolvable by declared identity, so the credentials decide.
+	 */
+	private isRuntimeEndpoint(): boolean {
+		if (!this.config) {
+			throw new Error('Configuration not loaded');
+		}
+
+		const { organisationId, projectId, endpointSettings } = this.config;
+		const { realm, applicationSid } = endpointSettings.sipConnectivityInfo;
+
+		return !!(organisationId && projectId && endpointSettings.endpointId) && !realm && !applicationSid;
 	}
 
 	/**
@@ -102,18 +121,17 @@ export class ConfigManager {
 		return this.config.endpointSettings.sipConnectivityInfo.applicationSid;
 	}
 
-	/** Bare endpointId once identity is declared via headers; legacy
-	 *  app-<applicationSid> target otherwise. */
+	/** Bare endpointId for runtime endpoints (identity declared via headers);
+	 *  legacy app-<applicationSid> target otherwise. */
 	getCallTarget(): string {
 		if (!this.config) {
 			throw new Error('Configuration not loaded');
 		}
 
-		const { organisationId, projectId, endpointSettings } = this.config;
-		const { endpointId } = endpointSettings;
+		const { endpointSettings } = this.config;
 
-		return organisationId && projectId && endpointId
-			? endpointId
+		return this.isRuntimeEndpoint()
+			? endpointSettings.endpointId!
 			: `app-${endpointSettings.sipConnectivityInfo.applicationSid}`;
 	}
 
