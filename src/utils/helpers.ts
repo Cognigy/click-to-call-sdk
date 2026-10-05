@@ -78,14 +78,19 @@ export function isWebRTCSupported(): boolean {
 export function validateEndpointConfig(config: any): boolean {
 	if (!config || typeof config !== 'object') return false;
 
+	// Same rule as ConfigManager.isRuntimeEndpoint: no realm/applicationSid means runtime.
+	const isRuntime =
+		!!getNestedProperty(config, 'endpointSettings.endpointId') &&
+		!getNestedProperty(config, 'endpointSettings.sipConnectivityInfo.realm') &&
+		!getNestedProperty(config, 'endpointSettings.sipConnectivityInfo.applicationSid');
+
 	const required = [
 		'organisationId',
 		'projectId',
 		'endpointSettings',
 		'endpointSettings.sipConnectivityInfo',
 		'endpointSettings.sipConnectivityInfo.wsUri',
-		// Runtime endpoints (declared endpointId) carry no realm or credentials
-		...(getNestedProperty(config, 'endpointSettings.endpointId')
+		...(isRuntime
 			? []
 			: [
 					'endpointSettings.sipConnectivityInfo.username',

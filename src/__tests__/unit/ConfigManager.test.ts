@@ -76,6 +76,25 @@ describe('ConfigManager', () => {
 			);
 		});
 
+		it('rejects a config with endpointId and incomplete legacy credentials', async () => {
+			const { password: _password, ...incomplete } = mockEndpointConfig.endpointSettings.sipConnectivityInfo;
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: () =>
+					Promise.resolve({
+						...mockEndpointConfig,
+						endpointSettings: {
+							...mockEndpointConfig.endpointSettings,
+							endpointId: 'endpoint-1',
+							sipConnectivityInfo: incomplete,
+						},
+					}),
+			});
+
+			await expect(configManager.fetchConfig()).rejects.toThrow('Invalid endpoint configuration received');
+		});
+
 		it('should handle invalid configuration response', async () => {
 			const invalidResponse = {
 				ok: true,
