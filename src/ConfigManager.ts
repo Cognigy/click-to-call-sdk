@@ -88,17 +88,11 @@ export class ConfigManager {
 			realm: sipInfo.realm,
 			organisationId: this.config.organisationId,
 			projectId: this.config.projectId,
-			// Declared only for runtime endpoints: the SIP layer reads it as "skip REGISTER,
-			// admit by declared identity", which a legacy endpoint can't be resolved by.
 			endpointId: runtime ? this.config.endpointSettings.endpointId : undefined,
 		};
 	}
 
-	/**
-	 * The endpoint handshake returns organisationId/projectId/endpointId for every endpoint,
-	 * legacy ones included. Only runtime endpoints lack the SIP realm credentials, and only
-	 * they are resolvable by declared identity, so the credentials decide.
-	 */
+	/** The handshake sends endpointId for legacy endpoints too, so the missing SIP credentials decide. */
 	private isRuntimeEndpoint(): boolean {
 		if (!this.config) {
 			throw new Error('Configuration not loaded');
@@ -121,8 +115,7 @@ export class ConfigManager {
 		return this.config.endpointSettings.sipConnectivityInfo.applicationSid;
 	}
 
-	/** Bare endpointId for runtime endpoints (identity declared via headers);
-	 *  legacy app-<applicationSid> target otherwise. */
+	/** Bare endpointId for runtime endpoints; app-<applicationSid> for legacy ones. */
 	getCallTarget(): string {
 		if (!this.config) {
 			throw new Error('Configuration not loaded');

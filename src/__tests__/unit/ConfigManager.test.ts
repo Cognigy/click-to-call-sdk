@@ -120,8 +120,6 @@ describe('ConfigManager', () => {
 		});
 	});
 
-	// The endpoint handshake returns organisationId/projectId/endpointId for every endpoint,
-	// legacy ones included; only the SIP credentials tell the two kinds apart.
 	const legacyConfigWithIds = () => ({
 		ok: true,
 		status: 200,
