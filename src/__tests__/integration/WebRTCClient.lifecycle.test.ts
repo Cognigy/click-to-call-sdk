@@ -578,6 +578,24 @@ describe('WebRTCClient call lifecycle', () => {
 			expect(client.getState().endInfo).toEqual({ originator: null, cause: 'CONFIG_INVALID', description: null });
 		});
 
+		it('a cleartext ws:// URI fails with Connection Error and never opens a socket', async () => {
+			const info = mockEndpointConfig.endpointSettings.sipConnectivityInfo;
+			respondWith({
+				...mockEndpointConfig,
+				endpointSettings: {
+					...mockEndpointConfig.endpointSettings,
+					sipConnectivityInfo: { ...info, wsUri: 'ws://sip.example.com:8080' },
+				},
+			});
+			create();
+
+			await expect(client.connect()).rejects.toThrow(/wss/);
+
+			expect(client.getState().status).toBe('failed');
+			expect(client.getState().endInfo.cause).toBe('Connection Error');
+			expect(client.isConnected()).toBe(false);
+		});
+
 		it('fetch failure fails with CONFIG_FETCH_FAILED', async () => {
 			global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.serverError);
 			create();

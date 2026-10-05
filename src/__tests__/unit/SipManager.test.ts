@@ -63,6 +63,21 @@ describe('SipManager', () => {
 			});
 		});
 
+		it.each(['ws://example.com:8080', 'http://example.com', 'https://example.com'])(
+			'rejects a non-wss URI (%s)',
+			(wsUri) => {
+				expect(() => sipManager.initialize(mockClientConfig, { ...mockSettings, wsUri })).toThrow(/wss/);
+				expect(MockWebSocketInterfaceSpy).not.toHaveBeenCalled();
+				expect(MockUASpy).not.toHaveBeenCalled();
+			},
+		);
+
+		it('accepts wss regardless of scheme case', () => {
+			expect(() =>
+				sipManager.initialize(mockClientConfig, { ...mockSettings, wsUri: 'WSS://example.com:8443' }),
+			).not.toThrow();
+		});
+
 		it('does not log the SIP password', () => {
 			const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
 			try {
