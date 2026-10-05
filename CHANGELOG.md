@@ -1,3 +1,10 @@
+## [0.2.1](https://github.com/Cognigy/click-to-call-sdk/compare/v0.2.0...v0.2.1) (2026-10-05)
+
+
+### Bug Fixes
+
+* **sip:** keep legacy endpoints on REGISTER and app-<applicationSid> (CGY-42103) ([#15](https://github.com/Cognigy/click-to-call-sdk/issues/15)) ([d8916ce](https://github.com/Cognigy/click-to-call-sdk/commit/d8916ce8f606100735c10070abb8ddb893ac2b10))
+
 # [0.2.0](https://github.com/Cognigy/click-to-call-sdk/compare/v0.1.1...v0.2.0) (2026-09-28)
 
 
