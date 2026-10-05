@@ -46,6 +46,13 @@ export class SipManager extends SDKEventEmitter {
 
 		console.log('Creating SIP client with config:', { client: { ...client, password: client.password ? '***' : undefined }, settings });
 
+		// SC-8: SIP credentials travel over this socket, so never allow cleartext
+		// (CTCW-SC8-001). new URL() lowercases the scheme.
+		const { protocol } = new URL(settings.wsUri);
+		if (protocol !== 'wss:') {
+			throw new Error(`SipManager requires a wss:// URI, got ${protocol}`);
+		}
+
 		const socket = new WebSocketInterface(settings.wsUri);
 
 		// The SDK only places calls and nothing needs to reach this UA, so it never
