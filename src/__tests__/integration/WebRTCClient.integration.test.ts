@@ -406,21 +406,21 @@ describe('WebRTCClient Integration Tests', () => {
 			expect(client.getRawSession()).toBe(mockUA.getLastSession());
 		});
 
-		it('wires REFER-created sessions into the session manager once', async () => {
+		it('rejects inbound REFER and replaces requests', async () => {
 			await client.startCall();
 			await new Promise(resolve => setTimeout(resolve, 20));
 			const created = vi.fn();
 			client.on('sessionCreated', created);
+			const rtc = mockUA.getLastSession();
 
-			const data = mockUA.getLastSession().simulateRefer(true);
-			const { MockRTCSession } = await import('../mocks/jssip.js');
-			const referred = new MockRTCSession('outgoing');
-			data.accept.mock.calls[0][0](referred);
-			// JsSIP then announces the same session on the UA
-			mockUA.emit('newRTCSession', { session: referred });
+			const refer = rtc.simulateRefer();
+			const replaces = rtc.simulateReplaces();
 
-			expect(created).toHaveBeenCalledTimes(1);
-			expect(referred.data.replaces).toBe(true);
+			expect(refer.reject).toHaveBeenCalledTimes(1);
+			expect(replaces.reject).toHaveBeenCalledTimes(1);
+			expect(refer.accept).not.toHaveBeenCalled();
+			expect(replaces.accept).not.toHaveBeenCalled();
+			expect(created).not.toHaveBeenCalled();
 		});
 
 		it('should dial the bare endpointId and thread identity headers through WebRTCClient', async () => {

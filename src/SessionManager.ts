@@ -20,18 +20,6 @@ export class SessionManager extends SDKEventEmitter {
 	private sessionsWithStreams = new Set<string>();
 	private activeSessionId: string | null = null;
 	private audioManager?: any;
-	private readonly pcConfig?: RTCConfiguration;
-	private readonly onNewSession: (rtcSession: ExtendedRTCSession) => void;
-
-	/**
-	 * @param pcConfig - Peer connection config, reused for sessions created via REFER/replaces
-	 * @param onNewSession - Receives sessions JsSIP creates for REFER/replaces; defaults to createSession
-	 */
-	constructor(pcConfig?: RTCConfiguration, onNewSession?: (rtcSession: ExtendedRTCSession) => void) {
-		super();
-		this.pcConfig = pcConfig;
-		this.onNewSession = onNewSession ?? ((rtcSession) => this.createSession(rtcSession));
-	}
 
 	/**
 	 * Set the audio manager for direct audio handling
@@ -44,7 +32,7 @@ export class SessionManager extends SDKEventEmitter {
 	 * Create a new session from an RTC session
 	 */
 	createSession(rtcSession: ExtendedRTCSession): string {
-		// JsSIP announces REFER/replaces sessions twice (init callback, then newRTCSession)
+		// The same RTCSession can be announced more than once
 		for (const existing of this.sessions.values()) {
 			if (existing.rtcSession === rtcSession) {
 				return existing.id;
@@ -172,39 +160,12 @@ export class SessionManager extends SDKEventEmitter {
 	}
 
 	/**
-	 * Always accept incoming REFER and replaces requests; JsSIP hands us the new session.
+	 * Reject inbound REFER and Replaces: there is no transfer UI, and accepting
+	 * Replaces would auto-answer with the microphone (CTCW-AC3-001/-002).
 	 */
 	private setupTransferHandlers(rtcSession: ExtendedRTCSession): void {
-		rtcSession.on('refer', (data: any) => {
-			const { request, accept } = data;
-			accept(
-				(newSession: ExtendedRTCSession) => {
-					// Flag it so the UI does not play ringing
-					if (request?.refer_to?.uri?.hasHeader('replaces')) {
-						newSession.data.replaces = true;
-					}
-					this.onNewSession(newSession);
-				},
-				{
-					mediaConstraints: { audio: true, video: false },
-					pcConfig: this.pcConfig,
-				},
-			);
-		});
-
-		rtcSession.on('replaces', (data: any) => {
-			data.accept((newSession: ExtendedRTCSession) => {
-				newSession.data.replaces = true;
-				this.onNewSession(newSession);
-
-				if (!newSession.isEstablished()) {
-					newSession.answer({
-						mediaConstraints: { audio: true, video: false },
-						pcConfig: this.pcConfig,
-					});
-				}
-			});
-		});
+		rtcSession.on('refer', (data: any) => data.reject());
+		rtcSession.on('replaces', (data: any) => data.reject());
 	}
 
 	/**

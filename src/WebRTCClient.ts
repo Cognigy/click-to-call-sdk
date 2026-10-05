@@ -61,7 +61,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		// Initialize managers
 		this.configManager = new ConfigManager(config.endpointUrl, config?.userId || undefined);
 		this.sipManager = new SipManager();
-		this.sessionManager = new SessionManager(config.pcConfig, (rtc) => this.sessionManager.createSession(rtc));
+		this.sessionManager = new SessionManager();
 		this.audioManager = new AudioManager();
 
 		// Set audio manager on session manager for direct audio handling

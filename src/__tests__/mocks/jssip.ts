@@ -86,17 +86,9 @@ export class MockRTCSession extends EventEmitter {
 		return evt;
 	}
 
-	/** Emit a JsSIP `refer` event; returns the event data so tests can call the captured `accept`. */
-	simulateRefer(hasReplaces = false) {
-		const data = {
-			request: {
-				refer_to: {
-					uri: { hasHeader: vi.fn((name: string) => hasReplaces && name === 'replaces') },
-				},
-			},
-			accept: vi.fn(),
-			reject: vi.fn(),
-		};
+	/** Emit a JsSIP `refer` event; returns the event data. */
+	simulateRefer() {
+		const data = { request: {}, accept: vi.fn(), reject: vi.fn() };
 		this.emit('refer', data);
 		return data;
 	}
