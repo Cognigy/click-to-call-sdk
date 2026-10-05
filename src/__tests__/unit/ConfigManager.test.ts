@@ -76,6 +76,25 @@ describe('ConfigManager', () => {
 			);
 		});
 
+		it('rejects a config with endpointId and incomplete legacy credentials', async () => {
+			const { password: _password, ...incomplete } = mockEndpointConfig.endpointSettings.sipConnectivityInfo;
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: () =>
+					Promise.resolve({
+						...mockEndpointConfig,
+						endpointSettings: {
+							...mockEndpointConfig.endpointSettings,
+							endpointId: 'endpoint-1',
+							sipConnectivityInfo: incomplete,
+						},
+					}),
+			});
+
+			await expect(configManager.fetchConfig()).rejects.toThrow('Invalid endpoint configuration received');
+		});
+
 		it('should handle invalid configuration response', async () => {
 			const invalidResponse = {
 				ok: true,
@@ -120,15 +139,48 @@ describe('ConfigManager', () => {
 		});
 	});
 
+	const legacyConfigWithIds = () => ({
+		ok: true,
+		status: 200,
+		json: () =>
+			Promise.resolve({
+				...mockEndpointConfig,
+				endpointSettings: { ...mockEndpointConfig.endpointSettings, endpointId: 'endpoint-1' },
+			}),
+	});
+
 	describe('getSipCredentials', () => {
-		it('includes organisationId/projectId/endpointId from the config', async () => {
-			global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.success);
+		it('does not declare the endpointId for a legacy endpoint, even when the config carries it', async () => {
+			global.fetch = vi.fn().mockResolvedValue(legacyConfigWithIds());
 			await configManager.fetchConfig();
 
 			const credentials = configManager.getSipCredentials();
 			expect(credentials.organisationId).toBe('test-org-id');
 			expect(credentials.projectId).toBe('test-project-id');
 			expect(credentials.endpointId).toBeUndefined();
+			expect(credentials.realm).toBe('sip.example.com');
+		});
+
+		it('includes organisationId/projectId/endpointId for a runtime endpoint', async () => {
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: () =>
+					Promise.resolve({
+						...mockEndpointConfig,
+						endpointSettings: {
+							...mockEndpointConfig.endpointSettings,
+							endpointId: 'endpoint-1',
+							sipConnectivityInfo: { wsUri: 'wss://sip.example.com:8443' },
+						},
+					}),
+			});
+			await configManager.fetchConfig();
+
+			const credentials = configManager.getSipCredentials();
+			expect(credentials.organisationId).toBe('test-org-id');
+			expect(credentials.projectId).toBe('test-project-id');
+			expect(credentials.endpointId).toBe('endpoint-1');
 		});
 	});
 
@@ -140,12 +192,13 @@ describe('ConfigManager', () => {
 			expect(configManager.getCallTarget()).toBe('app-00000000-0000-0000-0000-000000000002');
 		});
 
-		it('dials the bare endpointId once organisationId/projectId/endpointId are all declared', async () => {
+		it('dials the bare endpointId for a runtime endpoint (declared ids, no SIP credentials)', async () => {
 			const runtimeConfig = {
 				...mockEndpointConfig,
 				endpointSettings: {
 					...mockEndpointConfig.endpointSettings,
 					endpointId: 'endpoint-1',
+					sipConnectivityInfo: { wsUri: 'wss://sip.example.com:8443' },
 				},
 			};
 			global.fetch = vi.fn().mockResolvedValue({
@@ -156,6 +209,13 @@ describe('ConfigManager', () => {
 			await configManager.fetchConfig();
 
 			expect(configManager.getCallTarget()).toBe('endpoint-1');
+		});
+
+		it('still dials app-<applicationSid> for a legacy endpoint whose config also carries the declared ids', async () => {
+			global.fetch = vi.fn().mockResolvedValue(legacyConfigWithIds());
+			await configManager.fetchConfig();
+
+			expect(configManager.getCallTarget()).toBe('app-00000000-0000-0000-0000-000000000002');
 		});
 
 		it('throws when config is not loaded', () => {

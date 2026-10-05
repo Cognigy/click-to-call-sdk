@@ -144,6 +144,33 @@ describe('WebRTCClient Integration Tests', () => {
 			}));
 		});
 
+		it('should keep registering and dial app-<applicationSid> for a legacy endpoint that also carries the declared ids', async () => {
+			await client.destroy();
+			const legacyConfigWithIds = {
+				...mockEndpointConfig,
+				endpointSettings: { ...mockEndpointConfig.endpointSettings, endpointId: 'endpoint-1' },
+			};
+			global.fetch = vi.fn().mockResolvedValue({
+				ok: true,
+				status: 200,
+				json: () => Promise.resolve(legacyConfigWithIds),
+			});
+			client = new WebRTCClient(mockWebRTCClientConfig);
+			await client.connect();
+			mockUA = (client as any).sipManager.getUserAgent();
+			expect(mockUA.config).toMatchObject({
+				register: true,
+				uri: 'sip:test-user-123@sip.example.com',
+				authorization_user: 'widget-test-user',
+			});
+
+			await client.startCall();
+
+			expect(mockUA.call).toHaveBeenCalledWith('app-00000000-0000-0000-0000-000000000002', expect.objectContaining({
+				extraHeaders: ['X-Source: webrtc', 'X-Organisation-Id: test-org-id', 'X-Project-Id: test-project-id'],
+			}));
+		});
+
 		it('should handle call failure', async () => {
 			const events: Array<{ event: string; session?: any }> = [];
 

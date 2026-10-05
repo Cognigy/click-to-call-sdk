@@ -76,6 +76,7 @@ export class ConfigManager {
 		}
 
 		const sipInfo = this.config.endpointSettings.sipConnectivityInfo;
+		const runtime = this.isRuntimeEndpoint();
 
 		return {
 			fullUsername: `${this.userId ?? ''}@${sipInfo.realm}`,
@@ -87,8 +88,20 @@ export class ConfigManager {
 			realm: sipInfo.realm,
 			organisationId: this.config.organisationId,
 			projectId: this.config.projectId,
-			endpointId: this.config.endpointSettings.endpointId,
+			endpointId: runtime ? this.config.endpointSettings.endpointId : undefined,
 		};
+	}
+
+	/** The handshake sends endpointId for legacy endpoints too, so the missing SIP credentials decide. */
+	private isRuntimeEndpoint(): boolean {
+		if (!this.config) {
+			throw new Error('Configuration not loaded');
+		}
+
+		const { organisationId, projectId, endpointSettings } = this.config;
+		const { realm, applicationSid } = endpointSettings.sipConnectivityInfo;
+
+		return !!(organisationId && projectId && endpointSettings.endpointId) && !realm && !applicationSid;
 	}
 
 	/**
@@ -102,18 +115,16 @@ export class ConfigManager {
 		return this.config.endpointSettings.sipConnectivityInfo.applicationSid;
 	}
 
-	/** Bare endpointId once identity is declared via headers; legacy
-	 *  app-<applicationSid> target otherwise. */
+	/** Bare endpointId for runtime endpoints; app-<applicationSid> for legacy ones. */
 	getCallTarget(): string {
 		if (!this.config) {
 			throw new Error('Configuration not loaded');
 		}
 
-		const { organisationId, projectId, endpointSettings } = this.config;
-		const { endpointId } = endpointSettings;
+		const { endpointSettings } = this.config;
 
-		return organisationId && projectId && endpointId
-			? endpointId
+		return this.isRuntimeEndpoint()
+			? endpointSettings.endpointId!
 			: `app-${endpointSettings.sipConnectivityInfo.applicationSid}`;
 	}
 
