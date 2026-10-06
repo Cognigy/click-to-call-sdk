@@ -16,7 +16,7 @@
     }
   },
   "scripts": {
-    "build": "rm -rf dist && vite build",
+    "build": "rm -rf dist && vite build && SDK_FORMAT=umd vite build",
     "dev": "NODE_ENV=development vite build --mode development --watch & NODE_ENV=development vite --mode development",
     "test": "vitest",
     "test:run": "vitest run",

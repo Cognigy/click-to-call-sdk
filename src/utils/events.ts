@@ -43,7 +43,8 @@ export class SDKEventEmitter extends NodeEventEmitter implements EventEmitter {
 	 * Remove all listeners for an event or all events
 	 */
 	removeAllListeners(event?: string): this {
-		return super.removeAllListeners(event);
+		// EventEmitter checks arguments.length: an explicit undefined removes nothing
+		return event === undefined ? super.removeAllListeners() : super.removeAllListeners(event);
 	}
 
 	/**
@@ -79,6 +80,7 @@ export const COGNIGY_WEBRTC_EVENTS = {
 	DISCONNECTED: 'disconnected',
 	REGISTERED: 'registered',
 	UNREGISTERED: 'unregistered',
+	REGISTRATION_FAILED: 'registrationFailed',
 
 	// Call events
 	RINGING: 'ringing',
@@ -95,6 +97,9 @@ export const COGNIGY_WEBRTC_EVENTS = {
 	INFO_SENT: 'infoSent',
 	DTMF_SENT: 'dtmfSent',
 
+	// State events
+	STATE_CHANGED: 'stateChanged',
+
 	// Error events
 	ERROR: 'error',
 
@@ -102,6 +107,8 @@ export const COGNIGY_WEBRTC_EVENTS = {
 	SESSION_CREATED: 'sessionCreated',
 	SESSION_UPDATED: 'sessionUpdated',
 	SESSION_DESTROYED: 'sessionDestroyed',
+	/** (remote: MediaStream | null, local: MediaStream | null) */
+	STREAMS_CHANGED: 'streamsChanged',
 
 	INFO_RECEIVED: 'infoReceived',
 	TRANSCRIPTION: 'transcription',

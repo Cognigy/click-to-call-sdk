@@ -31,6 +31,9 @@ The Click to Call SDK is a standalone, framework-agnostic TypeScript library tha
 │  │ Config   │ │ SIP      │ │ Session  │ │ Audio  │  │
 │  │ Manager  │ │ Manager  │ │ Manager  │ │ Manager│  │
 │  └──────────┘ └──────────┘ └──────────┘ └────────┘  │
+│  ┌────────────────┐                                 │
+│  │ CallStateStore │  immutable state + stateChanged │
+│  └────────────────┘                                 │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -47,22 +50,28 @@ The public surface of the SDK. Exports:
 
 ### WebRTCClient (`src/WebRTCClient.ts`)
 
-The **orchestrator**. It owns the four managers and wires their internal events to a single public event bus.
+The **orchestrator**. It owns the managers and the `CallStateStore` and wires their internal events to a single public event bus.
 
 **Responsibilities:**
 
 - Lifecycle management (`connect`, `disconnect`, `destroy`).
+- Config access (`loadConfig`, `getConfig`, `setUserId`).
+- Call state (`getState`, `subscribe`) and the advanced `getRawSession()`.
+- The call setup timer (`callSetupTimeoutMs`) and `disconnectAfterCall`.
 - Call control (`startCall`, `endCall`, `mute`, `unmute`, `sendInfo`, `sendDTMF`).
 - Forwarding events from internal managers to the consumer.
 - Ensuring correct call sequence (e.g., must connect before calling).
 
 **Key flow — `connect()`:**
 
-1. `ConfigManager.fetchConfig()` — fetches endpoint settings from the server.
+0. Resets the state to `connecting` and arms the setup timer (only if `callSetupTimeoutMs` is set).
+1. `ConfigManager.fetchConfig()` — fetches endpoint settings from the server (cached; shared with `loadConfig()`).
 2. `ConfigManager.getSipCredentials()` — extracts SIP credentials + derives `fullUsername`.
 3. `SipManager.initialize(credentials, settings)` — creates the JsSIP User Agent.
 4. `SipManager.start()` — opens the WebSocket and registers with the SIP server.
-5. Waits for both `connected` and `registered` events (with 15s timeout).
+5. Waits for `connected` and, when the endpoint needs registration, `registered` (with 15s timeout).
+
+Failures reject with `Failed to connect: …` and set the state to `failed` with an `SDK_END_CAUSES` cause (or `Connection Error`). `endCall()` / `disconnect()` before a session exists abort the pending `connect()` and end the state with cause `Canceled`.
 
 **Key flow — `startCall()`:**
 
@@ -70,6 +79,27 @@ The **orchestrator**. It owns the four managers and wires their internal events 
 2. Calls `SipManager.call('app-{applicationSid}')`.
 3. JsSIP creates an RTCSession → `SessionManager.createSession()` handles it.
 4. Session events (ringing, answered, ended, etc.) bubble up through `WebRTCClient`.
+
+### Call lifecycle
+
+```
+idle → connecting → ringing → answered → ended / failed
+          │            │
+          │            └─→ ended / failed (session events, Connection Error)
+          │
+          └─→ before a session exists:
+              ended (Canceled) / failed (SETUP_TIMEOUT, config, registration, Connection Error)
+```
+
+- `connecting`: from `connect()` (or `startCall()` on a client that already completed a call) until ringing.
+- `SETUP_TIMEOUT` and the SDK's own `Canceled` only occur before a session exists; once a session exists, the
+  state follows its events (`endCall()` sends 480 and JsSIP reports the cause).
+- `callSetupTimeoutMs` (opt-in, no default): the timer starts on `connect()`; `startCall()` re-arms it only on a client that already completed a call. It is cleared when the SIP session is created (`sessionCreated`, INVITE sent), not on answer. On expiry the attempt is torn down, a pending `connect()` rejects and the state becomes `failed` with `SETUP_TIMEOUT`.
+- Only events of the current session drive the state; events from any other session are ignored.
+- A lost transport while a session exists ends the call with cause `Connection Error` and disconnects. Before a session exists the setup timer covers it.
+- `disconnectAfterCall`: when the state turns terminal (`ended` / `failed`) the SIP UA is stopped before `stateChanged` is forwarded; the next `connect()` starts a new UA. Listeners stay registered across `disconnect()`.
+- `getCurrentSession()` returns only an answered session; `getRawSession()` returns the current session including while ringing. `endCall()` works while ringing; `mute()`, `sendInfo()` and `sendDTMF()` need an answered call.
+- The `error` event is emitted only when a listener exists (an unhandled `error` would throw inside JsSIP callbacks). Failures also land in `getState().endInfo`.
 
 ### ConfigManager (`src/ConfigManager.ts`)
 
@@ -123,6 +153,17 @@ init → ringing → answered → ended
                           → failed
 ```
 
+### CallStateStore (`src/CallStateStore.ts`)
+
+Holds the immutable `ClientState` snapshot (`status`, `muted`, `session`, `endInfo`, `transcript`, `remoteStream`, `localStream`). Each snapshot, its transcript and messages are frozen.
+
+**Responsibilities:**
+
+- `update(patch)` replaces the state object and emits `stateChanged` only when a field actually changed.
+- `startCall()` resets the state to `connecting`.
+- `addTranscription()` appends transcript messages, dropping duplicates (same text and originator within 1s), and tolerates malformed payloads.
+- `WebRTCClient` feeds it from session events of the current session only (lifecycle, `sessionUpdated` for mute/hold, and the session-tagged internal `transcription` / `streamsChanged` events) and forwards `stateChanged` to consumers (`getState()` / `subscribe()`). Streams are cleared when the current session ends or fails.
+
 ### AudioManager (`src/AudioManager.ts`)
 
 Handles remote audio stream playback.
@@ -143,18 +184,21 @@ A custom `SDKEventEmitter` extending Node.js `EventEmitter` (polyfilled for brow
 
 | Category      | Events                                                                  |
 |---------------|-------------------------------------------------------------------------|
-| Connection    | `connecting`, `connected`, `disconnected`, `registered`, `unregistered` |
-| Call          | `ringing`, `answered`, `ended`, `failed`                                |
+| Connection    | `connecting`, `connected`, `disconnected`, `registered`, `unregistered`, `registrationFailed` |
+| Call          | `sessionCreated`, `ringing`, `answered`, `ended`, `failed`              |
 | Audio         | `muted`, `unmuted`, `audioEnded`, `captureAudio`                        |
 | Communication | `infoSent`, `dtmfSent`, `infoReceived`, `transcription`                 |
-| Internal      | `sessionCreated`, `sessionUpdated`, `sessionDestroyed`                  |
+| State         | `stateChanged`                                                          |
+| Internal      | `sessionUpdated`, `sessionDestroyed`, `streamsChanged`                  |
 | Error         | `error`                                                                 |
 
 ### Types
 
 **Public types** (`src/types/index.ts`):
 
-- `WebRTCClientConfig` — constructor config (endpointUrl, userId, pcConfig).
+- `WebRTCClientConfig` — constructor config (endpointUrl, userId, pcConfig, captureAudio, callSetupTimeoutMs, disconnectAfterCall).
+- `ClientState`, `CallStatus`, `TranscriptMessage` — call state snapshot.
+- `SDK_END_CAUSES` / `SdkEndCause` — `endInfo.cause` values the SDK sets itself.
 - `EndpointConfig` — server response shape (org/project IDs, SIP info, widget config).
 - `CallSession` — public session state (id, status, direction, timing, mute/hold).
 - `CallEndInfo` — call termination details (originator, cause, description).
@@ -234,7 +278,7 @@ Audio plays through browser
 - **Type declarations**: Generated via `vite-plugin-dts`
 - **Minification**: Terser
 - **Target**: ES2020
-- **Dependencies bundled**: `jssip`, `events` (Node.js polyfill)
+- **Dependencies**: ES and CJS bundles import `jssip` and `events` (installed as dependencies); the UMD bundle is self-contained (`SDK_FORMAT=umd` pass)
 
 ## Directory Structure
 
@@ -246,6 +290,7 @@ webrtc-sdk/
 │   ├── ConfigManager.ts      # Endpoint config fetching & caching
 │   ├── SipManager.ts         # JsSIP User Agent wrapper
 │   ├── SessionManager.ts     # Call session lifecycle
+│   ├── CallStateStore.ts     # Immutable call state snapshots
 │   ├── AudioManager.ts       # Remote audio playback
 │   ├── types/
 │   │   ├── index.ts          # Public type definitions

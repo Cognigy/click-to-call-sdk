@@ -12,7 +12,6 @@ export type ExtendedRTCSession = Omit<RTCSession, 'sendInfo'> & {
 	sendInfo: (text: string, data: Record<string, any>) => void;
 	data: {
 		originalNumber?: string;
-		replaces?: boolean;
 		[key: string]: any;
 	};
 };

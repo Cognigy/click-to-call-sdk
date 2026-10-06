@@ -60,11 +60,44 @@ export class MockRTCSession extends EventEmitter {
 	}
 
 	simulatePeerConnection() {
+		const listeners = new Map<string, Array<(evt: any) => void>>();
 		this._connection = {
-			addEventListener: vi.fn(),
+			addEventListener: vi.fn((type: string, handler: (evt: any) => void) => {
+				listeners.set(type, [...(listeners.get(type) ?? []), handler]);
+			}),
 			removeEventListener: vi.fn(),
+			getSenders: vi.fn((): any[] => []),
+			getReceivers: vi.fn((): any[] => []),
+			// Test helper: fire a peer-connection event at the registered listeners
+			dispatch: (type: string, evt: any = {}) => {
+				for (const handler of listeners.get(type) ?? []) handler(evt);
+			},
 		};
 		this.emit('peerconnection', { peerconnection: this._connection });
+	}
+
+	/** Emit a JsSIP `icecandidate` event; returns the event so tests can inspect `ready`. */
+	simulateIceCandidate(type: 'host' | 'srflx' | 'relay' | string) {
+		const evt = {
+			candidate: { candidate: `candidate:1 1 udp 2122260223 10.0.0.1 54321 typ ${type}` },
+			ready: vi.fn(),
+		};
+		this.emit('icecandidate', evt);
+		return evt;
+	}
+
+	/** Emit a JsSIP `refer` event; returns the event data. */
+	simulateRefer() {
+		const data = { request: {}, accept: vi.fn(), reject: vi.fn() };
+		this.emit('refer', data);
+		return data;
+	}
+
+	/** Emit a JsSIP `replaces` event; returns the event data. */
+	simulateReplaces() {
+		const data = { request: {}, accept: vi.fn(), reject: vi.fn() };
+		this.emit('replaces', data);
+		return data;
 	}
 
 	simulateInfoReceived(text: string, data: any = {}) {

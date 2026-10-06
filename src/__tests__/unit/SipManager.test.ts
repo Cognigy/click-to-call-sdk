@@ -63,6 +63,32 @@ describe('SipManager', () => {
 			});
 		});
 
+		it.each(['ws://example.com:8080', 'http://example.com', 'https://example.com'])(
+			'rejects a non-wss URI (%s)',
+			(wsUri) => {
+				expect(() => sipManager.initialize(mockClientConfig, { ...mockSettings, wsUri })).toThrow(/wss/);
+				expect(MockWebSocketInterfaceSpy).not.toHaveBeenCalled();
+				expect(MockUASpy).not.toHaveBeenCalled();
+			},
+		);
+
+		it('accepts wss regardless of scheme case', () => {
+			expect(() =>
+				sipManager.initialize(mockClientConfig, { ...mockSettings, wsUri: 'WSS://example.com:8443' }),
+			).not.toThrow();
+		});
+
+		it('does not log the SIP password', () => {
+			const log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+			try {
+				sipManager.initialize(mockClientConfig, mockSettings);
+				expect(log).toHaveBeenCalled();
+				expect(JSON.stringify(log.mock.calls)).not.toContain(mockClientConfig.password);
+			} finally {
+				log.mockRestore();
+			}
+		});
+
 		it('should stop existing UA before initializing new one', () => {
 			sipManager.initialize(mockClientConfig, mockSettings);
 			const firstUA = sipManager.getUserAgent();
@@ -136,6 +162,59 @@ describe('SipManager', () => {
 			expect(sipManager.isRegistered()).toBe(false);
 		});
 
+		it('ignores events from a UA it already stopped', () => {
+			sipManager.initialize(mockClientConfig, mockSettings);
+			const oldUA = sipManager.getUserAgent() as unknown as MockUA;
+			sipManager.stop();
+			sipManager.initialize(mockClientConfig, mockSettings);
+			const newUA = sipManager.getUserAgent() as unknown as MockUA;
+			newUA.emit('connected');
+			newUA.emit('registered');
+			const disconnected = vi.fn();
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, disconnected);
+
+			// JsSIP emits disconnected once the stopped UA's socket closes
+			oldUA.emit('disconnected', { code: 1000 });
+
+			expect(disconnected).not.toHaveBeenCalled();
+			expect(sipManager.isConnected()).toBe(true);
+			expect(sipManager.isRegistered()).toBe(true);
+		});
+
+		it('still forwards a stopped UA\'s disconnected while no newer UA exists', () => {
+			sipManager.initialize(mockClientConfig, mockSettings);
+			const oldUA = sipManager.getUserAgent() as unknown as MockUA;
+			oldUA.emit('connected');
+			sipManager.stop();
+			const disconnected = vi.fn();
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, disconnected);
+			const stateBefore = sipManager.getState();
+
+			oldUA.emit('disconnected', { code: 1000, reason: 'Normal' });
+			oldUA.emit('registered');
+
+			expect(disconnected).toHaveBeenCalledWith({ code: 1000, reason: 'Normal' });
+			expect(sipManager.getState()).toEqual(stateBefore);
+		});
+
+		it('drops a stopped UA\'s session and registration events even with no newer UA', () => {
+			sipManager.initialize(mockClientConfig, mockSettings);
+			const oldUA = sipManager.getUserAgent() as unknown as MockUA;
+			sipManager.stop();
+			const spy = vi.fn();
+			for (const event of ['connecting', 'connected', 'registered', 'newRTCSession', 'registrationFailed', 'error']) {
+				sipManager.on(event, () => spy(event));
+			}
+
+			oldUA.emit('connecting');
+			oldUA.emit('connected');
+			oldUA.emit('registered');
+			oldUA.emit('newRTCSession', { session: { data: {} } });
+			oldUA.emit('registrationFailed', { cause: 'Connection Error' });
+
+			expect(spy).not.toHaveBeenCalled();
+		});
+
 		it('should handle stop when not initialized', () => {
 			expect(() => sipManager.stop()).not.toThrow();
 		});
@@ -184,12 +263,11 @@ describe('SipManager', () => {
 			expect(() => sipManager.call('123')).toThrow('SIP manager not initialized');
 		});
 
-		it('should throw error if not registered', () => {
-			// Mock unregistered state
-			mockUA.isRegistered = vi.fn(() => false);
+		it('should dial even when not registered (JsSIP handles auth and reconnects)', () => {
 			(sipManager as any).state.registered = false;
 
-			expect(() => sipManager.call('123')).toThrow('SIP client not registered');
+			expect(() => sipManager.call('123')).not.toThrow();
+			expect(mockUA.call).toHaveBeenCalledTimes(1);
 		});
 
 		it('should emit error event on call failure', async() => {
@@ -404,6 +482,47 @@ describe('SipManager', () => {
 					message: 'Registration failed: Authentication failed',
 				})
 			);
+		});
+
+		it('emits registrationFailed with only cause and response status', () => {
+			sipManager.initialize(mockClientConfig, mockSettings);
+			mockUA = sipManager.getUserAgent() as unknown as MockUA;
+			const spy = vi.fn();
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, spy);
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.ERROR, () => {});
+
+			mockUA.emit('registrationFailed', {
+				cause: 'Rejected',
+				response: { status_code: 403, reason_phrase: 'Forbidden', headers: {}, data: 'raw' },
+			});
+
+			expect(spy).toHaveBeenCalledWith({
+				cause: 'Rejected',
+				response: { status_code: 403, reason_phrase: 'Forbidden' },
+			});
+		});
+
+		it('emits registrationFailed without response when JsSIP gives none', () => {
+			sipManager.initialize(mockClientConfig, mockSettings);
+			mockUA = sipManager.getUserAgent() as unknown as MockUA;
+			const spy = vi.fn();
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, spy);
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.ERROR, () => {});
+
+			mockUA.emit('registrationFailed', { cause: 'Connection Error' });
+
+			expect(spy).toHaveBeenCalledWith({ cause: 'Connection Error' });
+		});
+
+		it('emits disconnected with only code and reason', () => {
+			sipManager.initialize(mockClientConfig, mockSettings);
+			mockUA = sipManager.getUserAgent() as unknown as MockUA;
+			const spy = vi.fn();
+			sipManager.on(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, spy);
+
+			mockUA.emit('disconnected', { code: 1006, reason: 'gone', socket: {} });
+
+			expect(spy).toHaveBeenCalledWith({ code: 1006, reason: 'gone' });
 		});
 
 		it('should handle sendInfo errors gracefully', async () => {
