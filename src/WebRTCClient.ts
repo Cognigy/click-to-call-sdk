@@ -183,40 +183,20 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 			// Wait for connection with timeout
 			await withTimeout(
 				new Promise<void>((resolve, reject) => {
-					let connected = false;
-					let registered = !this.sipManager.needsRegistration();
-
 					const onConnected = () => {
-						connected = true;
-						if (registered) {
-							this.sipManager.off(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
-							this.sipManager.off(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
-							this.sipManager.off(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
-							this.isInitialized = true;
-							resolve();
-						}
-					};
-
-					const onRegistered = () => {
-						registered = true;
-						if (connected) {
-							this.sipManager.off(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
-							this.sipManager.off(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
-							this.sipManager.off(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
-							this.isInitialized = true;
-							resolve();
-						}
+						this.sipManager.off(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
+						this.sipManager.off(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
+						this.isInitialized = true;
+						resolve();
 					};
 
 					const onError = (error: Error) => {
 						this.sipManager.off(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
-						this.sipManager.off(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
 						this.sipManager.off(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
 						reject(error);
 					};
 
 					this.sipManager.on(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
-					this.sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
 					this.sipManager.on(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
 				}),
 				15000 // 15 second timeout
@@ -258,10 +238,6 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	async startCall(): Promise<void> {
 		if (!this.isInitialized) {
 			throw new Error('Client not connected. Call connect() first.');
-		}
-
-		if (this.sipManager.needsRegistration() && !this.sipManager.isRegistered()) {
-			throw new Error('SIP client not registered');
 		}
 
 		try {
@@ -352,7 +328,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	 * Check if connected to SIP server
 	 */
 	isConnected(): boolean {
-		return this.isInitialized && this.sipManager.isRegistered();
+		return this.isInitialized && this.sipManager.isConnected();
 	}
 
 	/**
