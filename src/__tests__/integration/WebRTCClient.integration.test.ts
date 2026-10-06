@@ -250,6 +250,15 @@ describe('WebRTCClient Integration Tests', () => {
 			expect(client.getState().localStream).toBe(local);
 		});
 
+		it('exposes the remote stream via getRemoteStream', async () => {
+			const remote = {} as MediaStream;
+			expect(client.getRemoteStream()).toBeNull();
+			await startSession();
+			const id = client.getState().session?.id;
+			(client as any).sessionManager.emit(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, remote, null, id);
+			expect(client.getRemoteStream()).toBe(remote);
+		});
+
 		it('ignores transcription and streams from a previous session', async () => {
 			const first = await startSession();
 			first.simulatePeerConnection();
