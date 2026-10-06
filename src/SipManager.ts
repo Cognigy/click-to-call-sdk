@@ -19,7 +19,6 @@ export class SipManager extends SDKEventEmitter {
 	private ua: IUA | null = null;
 	private pcConfig?: RTCConfiguration;
 	private identityHeaders: string[] = [];
-	private requiresRegistration = true;
 	private state: SipManagerState = {
 		ua: null,
 		connected: false,
@@ -49,20 +48,23 @@ export class SipManager extends SDKEventEmitter {
 
 		const socket = new WebSocketInterface(settings.wsUri);
 
-		// Runtime endpoints have no realm or credentials; the SBC admits them by the
-		// declared identity headers only, and nothing needs to reach this UA, so skip
-		// REGISTER. The host just has to parse — the resolver ignores it.
-		this.requiresRegistration = !(client.organisationId && client.projectId && client.endpointId);
-		const uaConfig = this.requiresRegistration
+		// The SDK only places calls and nothing needs to reach this UA, so it never
+		// registers: every REGISTER counts toward drachtio's per-IP spam ban, which
+		// trips fast when several callers share one public IP. The SBC admits runtime
+		// endpoints by their declared identity headers and challenges legacy ones on
+		// the INVITE itself, which JsSIP answers with the credentials below.
+		const isRuntime = !!(client.organisationId && client.projectId && client.endpointId);
+		const uaConfig = isRuntime
 			? {
+					// The host just has to parse — the resolver ignores it.
+					uri: `sip:${client.userId || 'anonymous'}@${new URL(settings.wsUri).hostname}`,
+					sockets: [socket],
+					register: false,
+				}
+			: {
 					uri: `sip:${client.fullUsername}`,
 					password: client.password,
 					authorization_user: client.username,
-					sockets: [socket],
-					register: true,
-				}
-			: {
-					uri: `sip:${client.userId || 'anonymous'}@${new URL(settings.wsUri).hostname}`,
 					sockets: [socket],
 					register: false,
 				};
@@ -196,10 +198,6 @@ export class SipManager extends SDKEventEmitter {
 			throw new Error('SIP manager not initialized');
 		}
 
-		if (this.requiresRegistration && !this.state.registered) {
-			throw new Error('SIP client not registered');
-		}
-
 		console.log(`Making call to: ${number}`);
 
 		try {
@@ -232,13 +230,6 @@ export class SipManager extends SDKEventEmitter {
 	 */
 	isConnected(): boolean {
 		return this.state.connected;
-	}
-
-	/**
-	 * Whether calls need a prior REGISTER (false for runtime endpoints)
-	 */
-	needsRegistration(): boolean {
-		return this.requiresRegistration;
 	}
 
 	/**

@@ -66,7 +66,7 @@ interface WebRTCClientConfig {
 
 | Method                  | Description                                  |
 |-------------------------|----------------------------------------------|
-| `connect()`             | Connect to SIP server and register           |
+| `connect()`             | Connect to the SIP server (no REGISTER)   |
 | `disconnect()`          | Disconnect from SIP server                   |
 | `connectAndCall()`      | Connect + start call in one step             |
 | `startCall()`           | Start a call (must be connected first)       |

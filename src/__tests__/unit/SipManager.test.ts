@@ -59,7 +59,7 @@ describe('SipManager', () => {
 				password: mockClientConfig.password,
 				authorization_user: mockClientConfig.username,
 				sockets: expect.any(Array),
-				register: true,
+				register: false,
 			});
 		});
 
@@ -117,9 +117,9 @@ describe('SipManager', () => {
 
 			expect(connectingSpy).toHaveBeenCalled();
 			expect(connectedSpy).toHaveBeenCalled();
-			expect(registeredSpy).toHaveBeenCalled();
+			expect(registeredSpy).not.toHaveBeenCalled();
 			expect(sipManager.isConnected()).toBe(true);
-			expect(sipManager.isRegistered()).toBe(true);
+			expect(sipManager.isRegistered()).toBe(false);
 		});
 	});
 
@@ -184,12 +184,11 @@ describe('SipManager', () => {
 			expect(() => sipManager.call('123')).toThrow('SIP manager not initialized');
 		});
 
-		it('should throw error if not registered', () => {
-			// Mock unregistered state
-			mockUA.isRegistered = vi.fn(() => false);
-			(sipManager as any).state.registered = false;
+		it('should place the call without being registered', () => {
+			expect(sipManager.isRegistered()).toBe(false);
 
-			expect(() => sipManager.call('123')).toThrow('SIP client not registered');
+			expect(() => sipManager.call('123')).not.toThrow();
+			expect(mockUA.call).toHaveBeenCalled();
 		});
 
 		it('should emit error event on call failure', async() => {
@@ -265,7 +264,7 @@ describe('SipManager', () => {
 			}));
 		});
 
-		it('registers with the realm credentials for a legacy endpoint', () => {
+		it('does not register but keeps the realm credentials for the INVITE challenge on a legacy endpoint', () => {
 			sipManager = new SipManager();
 			sipManager.initialize(mockClientConfig, mockSettings);
 
@@ -273,9 +272,8 @@ describe('SipManager', () => {
 				uri: 'sip:test@example.com',
 				password: 'password123',
 				authorization_user: 'test',
-				register: true,
+				register: false,
 			}));
-			expect(sipManager.needsRegistration()).toBe(true);
 		});
 
 		it('does not register and uses userId with the wsUri host for a runtime endpoint', async () => {
@@ -290,7 +288,6 @@ describe('SipManager', () => {
 			expect(config).toMatchObject({ uri: 'sip:webrtc-sdk-demo-abc@example.com', register: false });
 			expect(config).not.toHaveProperty('password');
 			expect(config).not.toHaveProperty('authorization_user');
-			expect(sipManager.needsRegistration()).toBe(false);
 
 			await startAndRegister();
 			expect(sipManager.isRegistered()).toBe(false);
@@ -384,7 +381,7 @@ describe('SipManager', () => {
 
 			const state = sipManager.getState();
 			expect(state.connected).toBe(true);
-			expect(state.registered).toBe(true);
+			expect(state.registered).toBe(false);
 			expect(state.connecting).toBe(false);
 		});
 	});
