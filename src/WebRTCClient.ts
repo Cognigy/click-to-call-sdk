@@ -645,6 +645,11 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 		return this.sessionManager.getActiveSession();
 	}
 
+	/** Audio from the remote party, e.g. for a visualizer. Null outside a call. */
+	getRemoteStream(): MediaStream | null {
+		return this.callStateStore.getState().remoteStream;
+	}
+
 	getState(): ClientState {
 		return this.callStateStore.getState();
 	}
