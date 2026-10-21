@@ -88,7 +88,6 @@ export const SDK_END_CAUSES = {
 	CONFIG_FETCH_FAILED: "CONFIG_FETCH_FAILED",
 	CONFIG_INVALID: "CONFIG_INVALID",
 	WIDGET_INACTIVE: "WIDGET_INACTIVE",
-	REGISTRATION_FAILED: "REGISTRATION_FAILED",
 	SETUP_TIMEOUT: "SETUP_TIMEOUT",
 } as const;
 
@@ -144,12 +143,6 @@ export interface SendDTMFOptions {
 	transportType?: 'INFO' | 'RFC2833';
 }
 
-/** Detail of a failed SIP registration; `response` is absent for transport-level failures. */
-export interface RegistrationFailedInfo {
-	cause: string;
-	response?: { status_code: number; reason_phrase: string };
-}
-
 /** Detail of a lost SIP transport connection (WebSocket close code and reason). */
 export interface DisconnectedInfo {
 	code?: number;
@@ -161,9 +154,6 @@ export interface WebRTCClientEvents {
 	'connecting': () => void;
 	'connected': () => void;
 	'disconnected': (info: DisconnectedInfo) => void;
-	'registered': () => void;
-	'unregistered': () => void;
-	'registrationFailed': (info: RegistrationFailedInfo) => void;
 	'sessionCreated': (session: CallSession) => void;
 	'ringing': (session: CallSession) => void;
 	'answered': (session: CallSession) => void;

@@ -23,7 +23,6 @@ export type {
 	EventName,
 	EventCallback,
 	WebRTCClientEvents,
-	RegistrationFailedInfo,
 	DisconnectedInfo,
 	SendDTMFOptions,
 	CallStatus,

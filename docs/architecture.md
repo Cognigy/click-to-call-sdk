@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Click to Call SDK is a standalone, framework-agnostic TypeScript library that enables browser-based voice calling over WebRTC using SIP signaling. It abstracts the complexity of SIP registration, WebRTC peer connections, and audio management behind a simple event-driven API.
+The Click to Call SDK is a standalone, framework-agnostic TypeScript library that enables browser-based voice calling over WebRTC using SIP signaling. It abstracts the complexity of WebRTC peer connections, and audio management behind a simple event-driven API.
 
 ## High-Level Architecture
 
@@ -68,8 +68,8 @@ The **orchestrator**. It owns the managers and the `CallStateStore` and wires th
 1. `ConfigManager.fetchConfig()` — fetches endpoint settings from the server (cached; shared with `loadConfig()`).
 2. `ConfigManager.getSipCredentials()` — extracts SIP credentials + derives `fullUsername`.
 3. `SipManager.initialize(credentials, settings)` — creates the JsSIP User Agent.
-4. `SipManager.start()` — opens the WebSocket and registers with the SIP server.
-5. Waits for `connected` and, when the endpoint needs registration, `registered` (with 15s timeout).
+4. `SipManager.start()` — opens the WebSocket to the SIP server. The UA never sends REGISTER; legacy calls are digest-challenged on the INVITE.
+5. Waits for the `connected` event (with 15s timeout).
 
 Failures reject with `Failed to connect: …` and set the state to `failed` with an `SDK_END_CAUSES` cause (or `Connection Error`). `endCall()` / `disconnect()` before a session exists abort the pending `connect()` and end the state with cause `Canceled`.
 
@@ -88,7 +88,7 @@ idle → connecting → ringing → answered → ended / failed
           │            └─→ ended / failed (session events, Connection Error)
           │
           └─→ before a session exists:
-              ended (Canceled) / failed (SETUP_TIMEOUT, config, registration, Connection Error)
+              ended (Canceled) / failed (SETUP_TIMEOUT, config, Connection Error)
 ```
 
 - `connecting`: from `connect()` (or `startCall()` on a client that already completed a call) until ringing.
@@ -120,10 +120,10 @@ Wraps [JsSIP](https://jssip.net/) to manage the SIP User Agent lifecycle.
 **Responsibilities:**
 
 - Creates a JsSIP `UA` with WebSocket transport.
-- Handles connection/registration state transitions.
+- Handles connection state transitions.
 - Initiates outbound calls via `ua.call()` with audio-only media constraints.
 - Intercepts `newRTCSession` events and patches the session's `sendInfo` method to use JSON payloads.
-- Tracks connection state (`connected`, `registered`, `connecting`).
+- Tracks connection state (`connected`, `connecting`).
 
 **JsSIP integration:**
 
@@ -184,7 +184,7 @@ A custom `SDKEventEmitter` extending Node.js `EventEmitter` (polyfilled for brow
 
 | Category      | Events                                                                  |
 |---------------|-------------------------------------------------------------------------|
-| Connection    | `connecting`, `connected`, `disconnected`, `registered`, `unregistered`, `registrationFailed` |
+| Connection    | `connecting`, `connected`, `disconnected` |
 | Call          | `sessionCreated`, `ringing`, `answered`, `ended`, `failed`              |
 | Audio         | `muted`, `unmuted`, `audioEnded`, `captureAudio`                        |
 | Communication | `infoSent`, `dtmfSent`, `infoReceived`, `transcription`                 |

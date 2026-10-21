@@ -220,18 +220,6 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 			this.emit(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, info);
 		});
 
-		this.sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTERED, () => {
-			this.emit(COGNIGY_WEBRTC_EVENTS.REGISTERED);
-		});
-
-		this.sipManager.on(COGNIGY_WEBRTC_EVENTS.UNREGISTERED, () => {
-			this.emit(COGNIGY_WEBRTC_EVENTS.UNREGISTERED);
-		});
-
-		this.sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, (info) => {
-			this.emit(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, info);
-		});
-
 		this.sipManager.on('newRTCSession', (rtcSession) => {
 			if (this.isDestroyed) return;
 			this.sessionManager.createSession(rtcSession);
@@ -348,7 +336,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	 * to `connecting` and arms the setup timer (if `callSetupTimeoutMs` is set).
 	 * While a call is in progress it returns the in-flight promise.
 	 *
-	 * Rejects (`Failed to connect: …`) on config, registration or connection
+	 * Rejects (`Failed to connect: …`) on config or connection
 	 * failure (state `failed`), when the setup timeout fires (`SETUP_TIMEOUT`),
 	 * and when the attempt is cancelled by endCall() or disconnect() (state
 	 * `ended`, cause `Canceled`).
@@ -424,33 +412,13 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 				withTimeout(
 					new Promise<void>((resolve, reject) => {
 						const sip = this.sipManager;
-						let connected = false;
-						let registered = !sip.needsRegistration();
-						const settle = () => {
-							if (connected && registered) resolve();
-						};
-						const onConnected = () => {
-							connected = true;
-							settle();
-						};
-						const onRegistered = () => {
-							registered = true;
-							settle();
-						};
-						// Emitted just before the matching 'error'
-						const onRegistrationFailed = () => {
-							cause = SDK_END_CAUSES.REGISTRATION_FAILED;
-						};
+						const onConnected = () => resolve();
 						const onError = (error: Error) => reject(error);
 
 						sip.on(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
-						sip.on(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
-						sip.on(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, onRegistrationFailed);
 						sip.on(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
 						removeListeners = () => {
 							sip.off(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
-							sip.off(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
-							sip.off(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, onRegistrationFailed);
 							sip.off(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
 						};
 
@@ -509,8 +477,8 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	/**
 	 * Start a call. No-op while a session is live. On a connected client after
 	 * an earlier call (no new connect()), resets the state and arms the setup
-	 * timer like connect() does. Does not re-check registration: connect()
-	 * already waited for it, and JsSIP dials and reconnects the transport itself.
+	 * timer like connect() does. Does not re-check the connection:
+	 * JsSIP dials and reconnects the transport itself.
 	 */
 	async startCall(): Promise<void> {
 		if (!this.isInitialized) {
@@ -631,11 +599,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	 * Check if connected to SIP server
 	 */
 	isConnected(): boolean {
-		return (
-			this.isInitialized &&
-			this.sipManager.isConnected() &&
-			(this.sipManager.isRegistered() || !this.sipManager.needsRegistration())
-		);
+		return this.isInitialized && this.sipManager.isConnected();
 	}
 
 	/**
@@ -704,13 +668,11 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	 */
 	getStatus(): {
 		connected: boolean;
-		registered: boolean;
 		activeSession: CallSession | null;
 		audioState: any;
 	} {
 		return {
 			connected: this.sipManager.isConnected(),
-			registered: this.sipManager.isRegistered(),
 			activeSession: this.getCurrentSession(),
 			audioState: this.audioManager.getState(),
 		};
