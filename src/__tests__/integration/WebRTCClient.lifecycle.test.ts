@@ -83,7 +83,6 @@ describe('WebRTCClient call lifecycle', () => {
 			CONFIG_FETCH_FAILED: 'CONFIG_FETCH_FAILED',
 			CONFIG_INVALID: 'CONFIG_INVALID',
 			WIDGET_INACTIVE: 'WIDGET_INACTIVE',
-			REGISTRATION_FAILED: 'REGISTRATION_FAILED',
 			SETUP_TIMEOUT: 'SETUP_TIMEOUT',
 		});
 	});
@@ -309,25 +308,6 @@ describe('WebRTCClient call lifecycle', () => {
 			expect(lastUA()).not.toBe(oldUA);
 			expect(lastUA().call).toHaveBeenCalledTimes(1);
 			expect(client.getState().status).toBe('ringing');
-		});
-
-		it('a late registrationFailed from a stopped UA emits nothing publicly', async () => {
-			create();
-			await connect();
-			const oldUA = lastUA();
-			await client.disconnect();
-			const registrationFailed = vi.fn();
-			const error = vi.fn();
-			const states = vi.fn();
-			client.on('registrationFailed', registrationFailed);
-			client.on('error', error);
-			client.subscribe(states);
-
-			oldUA.emit('registrationFailed', { cause: 'Connection Error' });
-
-			expect(registrationFailed).not.toHaveBeenCalled();
-			expect(error).not.toHaveBeenCalled();
-			expect(states).not.toHaveBeenCalled();
 		});
 
 		it('ignores disconnected from a UA that was already stopped', async () => {
@@ -631,7 +611,6 @@ describe('WebRTCClient call lifecycle', () => {
 
 			expect(client.isConnected()).toBe(true);
 			expect(lastUA().config.register).toBe(false);
-			expect(lastUA().isRegistered()).toBe(false);
 		});
 
 		it('stops the UA after a failed connect so setUserId and reconnect work', async () => {

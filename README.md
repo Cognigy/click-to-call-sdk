@@ -77,7 +77,7 @@ interface WebRTCClientConfig {
 | `loadConfig()`          | Fetch the endpoint config once and cache it (concurrent calls share one request); resolves `EndpointConfig`. Does not validate SIP fields, so a widget can render configs `connect()` rejects |
 | `getConfig()`           | Cached `EndpointConfig` or `null` (before `loadConfig()`/`connect()`) |
 | `setUserId(id)`         | Override the SIP user id. Throws once the SIP UA exists (`connect()` started, until `disconnect()`) |
-| `connect()`             | Connect to the SIP server (no REGISTER); starts a new call attempt (state `connecting`). Rejects on config or connection failure, on setup timeout, and when cancelled via `endCall()` / `disconnect()` |
+| `connect()`             | Connect to the SIP server; starts a new call attempt (state `connecting`). Rejects on config or connection failure, on setup timeout, and when cancelled via `endCall()` / `disconnect()` |
 | `disconnect()`          | Disconnect from SIP server; cancels a pending `connect()` |
 | `connectAndCall()`      | Connect + start call in one step; rejects like `connect()`, also with `Failed to connect: <cause>` when cancelled or timed out after connecting but before dialing |
 | `startCall()`           | Start a call (must be connected first)       |
@@ -101,9 +101,6 @@ interface WebRTCClientConfig {
 | `connecting`    | `()`                                                                    |
 | `connected`     | `()`                                                                    |
 | `disconnected`  | `(info: { code?: number; reason?: string })`                            |
-| `registered`    | `()`                                                                    |
-| `unregistered`  | `()`                                                                    |
-| `registrationFailed` | `(info: { cause: string; response?: { status_code: number; reason_phrase: string } })` |
 | `sessionCreated`| SIP session created, INVITE sent `(session: CallSession)`               |
 | `ringing`       | `(session: CallSession)`                                                |
 | `answered`      | `(session: CallSession)`                                                |
@@ -120,9 +117,7 @@ interface WebRTCClientConfig {
 | `stateChanged`  | `(state: ClientState)`                                                  |
 | `error`         | `(error: Error)`                                                        |
 
-> **Note:** the SDK never sends REGISTER, so `registered`, `unregistered` and `registrationFailed` are not emitted.
->
-> `error` is only emitted while a listener is registered. Connection and setup failures (config,
+> **Note:** `error` is only emitted while a listener is registered. Connection and setup failures (config,
 > transport) also land in `getState().endInfo` and reject `connect()`; other errors, such as
 > audio playback failures, are only reported through `error`.
 
@@ -171,7 +166,6 @@ call that ends before a SIP session exists (via `endCall()` / `disconnect()`) en
 | `CONFIG_FETCH_FAILED`   | The endpoint config could not be fetched                    |
 | `CONFIG_INVALID`        | The config lacks required fields (org, project, SIP credentials) |
 | `WIDGET_INACTIVE`       | The widget is not active in the endpoint config             |
-| `REGISTRATION_FAILED`   | SIP registration failed                                     |
 | `SETUP_TIMEOUT`         | No SIP session within `callSetupTimeoutMs`                  |
 
 The SDK also sets two causes that are not in `SDK_END_CAUSES`:

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Click to Call SDK is a standalone, framework-agnostic TypeScript library that enables browser-based voice calling over WebRTC using SIP signaling. It abstracts the complexity of SIP registration, WebRTC peer connections, and audio management behind a simple event-driven API.
+The Click to Call SDK is a standalone, framework-agnostic TypeScript library that enables browser-based voice calling over WebRTC using SIP signaling. It abstracts the complexity of WebRTC peer connections, and audio management behind a simple event-driven API.
 
 ## High-Level Architecture
 
@@ -120,10 +120,10 @@ Wraps [JsSIP](https://jssip.net/) to manage the SIP User Agent lifecycle.
 **Responsibilities:**
 
 - Creates a JsSIP `UA` with WebSocket transport.
-- Handles connection/registration state transitions.
+- Handles connection state transitions.
 - Initiates outbound calls via `ua.call()` with audio-only media constraints.
 - Intercepts `newRTCSession` events and patches the session's `sendInfo` method to use JSON payloads.
-- Tracks connection state (`connected`, `registered`, `connecting`).
+- Tracks connection state (`connected`, `connecting`).
 
 **JsSIP integration:**
 
@@ -184,7 +184,7 @@ A custom `SDKEventEmitter` extending Node.js `EventEmitter` (polyfilled for brow
 
 | Category      | Events                                                                  |
 |---------------|-------------------------------------------------------------------------|
-| Connection    | `connecting`, `connected`, `disconnected`, `registered`, `unregistered`, `registrationFailed` |
+| Connection    | `connecting`, `connected`, `disconnected` |
 | Call          | `sessionCreated`, `ringing`, `answered`, `ended`, `failed`              |
 | Audio         | `muted`, `unmuted`, `audioEnded`, `captureAudio`                        |
 | Communication | `infoSent`, `dtmfSent`, `infoReceived`, `transcription`                 |

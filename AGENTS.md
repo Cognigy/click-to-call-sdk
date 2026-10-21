@@ -10,7 +10,7 @@ event-driven API. Public API reference: `README.md`. Architecture: `docs/archite
 (`src/WebRTCClient.ts`), which orchestrates the managers in `src/`:
 
 - `ConfigManager`: fetches endpoint config over HTTP, derives SIP credentials and userId
-- `SipManager`: JsSIP UA wrapper, WebSocket transport, registration
+- `SipManager`: JsSIP UA wrapper, WebSocket transport
 - `SessionManager`: call session lifecycle, info/transcription parsing
 - `CallStateStore`: immutable `ClientState` snapshots, emits `stateChanged`
 - `AudioManager`: remote audio playback, `captureAudio` for raw stream access

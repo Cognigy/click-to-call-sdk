@@ -50,13 +50,11 @@ describe('WebRTCClient Integration Tests', () => {
 
 			client.on(COGNIGY_WEBRTC_EVENTS.CONNECTING, eventHandler('connecting'));
 			client.on(COGNIGY_WEBRTC_EVENTS.CONNECTED, eventHandler('connected'));
-			client.on(COGNIGY_WEBRTC_EVENTS.REGISTERED, eventHandler('registered'));
 
 			await client.connect();
 			expect(client.isConnected()).toBe(true);
 			expect(events).toContain('connecting');
 			expect(events).toContain('connected');
-			expect(events).not.toContain('registered');
 		});
 
 		it('should handle connection failure gracefully', async () => {
@@ -736,7 +734,6 @@ describe('WebRTCClient Integration Tests', () => {
 
 			expect(initialStatus).toEqual({
 				connected: true,
-				registered: false,
 				activeSession: null,
 				audioState: expect.any(Object),
 			});
@@ -755,7 +752,6 @@ describe('WebRTCClient Integration Tests', () => {
 
 			expect(callStatus.activeSession).toBeTruthy();
 			expect(callStatus.connected).toBe(true);
-			expect(callStatus.registered).toBe(false);
 		});
 	});
 
@@ -807,25 +803,6 @@ describe('WebRTCClient Integration Tests', () => {
 	});
 
 	describe('Event detail', () => {
-		it('emits registrationFailed with response status', async () => {
-			client = new WebRTCClient(mockWebRTCClientConfig);
-			await client.connect();
-			mockUA = (client as any).sipManager.getUserAgent();
-			const handler = vi.fn();
-			client.on('registrationFailed', handler);
-			client.on('error', () => {});
-
-			mockUA.emit('registrationFailed', {
-				cause: 'Rejected',
-				response: { status_code: 403, reason_phrase: 'Forbidden', extra: 'x' },
-			});
-
-			expect(handler).toHaveBeenCalledWith({
-				cause: 'Rejected',
-				response: { status_code: 403, reason_phrase: 'Forbidden' },
-			});
-		});
-
 		it('emits disconnected with code and reason', async () => {
 			client = new WebRTCClient(mockWebRTCClientConfig);
 			await client.connect();

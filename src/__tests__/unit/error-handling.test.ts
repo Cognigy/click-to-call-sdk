@@ -176,19 +176,13 @@ describe('Error Handling and Edge Cases', () => {
 
 		it('should handle call attempts when not connected', async () => {
 			// Don't connect the client - leave it uninitialized
-			const isRegisteredSpy = vi.spyOn(sipManager, 'isRegistered');
-			isRegisteredSpy.mockImplementation(() => false);
-
 			await expect(client.startCall()).rejects.toThrow('Client not connected. Call connect() first.');
 		});
 
 
 		it('should handle info send failure', async () => {
 			// Mock start instead of initialize to avoid the UA check
-			sipManager.start = vi.fn().mockImplementation(() => {
-				// Simulate successful start
-				sipManager.isRegistered = vi.fn().mockReturnValue(true);
-			});
+			sipManager.start = vi.fn();
 
 			// Mock the session manager to have an active session
 			const sessionManager = (client as any).sessionManager;

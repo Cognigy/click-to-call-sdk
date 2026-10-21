@@ -45,7 +45,6 @@ describe('SipManager', () => {
 		it('should create SipManager instance', () => {
 			expect(sipManager).toBeInstanceOf(SipManager);
 			expect(sipManager.isConnected()).toBe(false);
-			expect(sipManager.isRegistered()).toBe(false);
 		});
 	});
 
@@ -105,7 +104,6 @@ describe('SipManager', () => {
 			expect(mockUA.listenerCount('connecting')).toBeGreaterThan(0);
 			expect(mockUA.listenerCount('connected')).toBeGreaterThan(0);
 			expect(mockUA.listenerCount('disconnected')).toBeGreaterThan(0);
-			expect(mockUA.listenerCount('registered')).toBeGreaterThan(0);
 			expect(mockUA.listenerCount('newRTCSession')).toBeGreaterThan(0);
 		});
 	});
@@ -130,11 +128,9 @@ describe('SipManager', () => {
 
 			const connectingSpy = vi.fn();
 			const connectedSpy = vi.fn();
-			const registeredSpy = vi.fn();
 
 			sipManager.on('connecting', connectingSpy);
 			sipManager.on(COGNIGY_WEBRTC_EVENTS.CONNECTED, connectedSpy);
-			sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTERED, registeredSpy);
 
 			sipManager.start();
 
@@ -143,9 +139,7 @@ describe('SipManager', () => {
 
 			expect(connectingSpy).toHaveBeenCalled();
 			expect(connectedSpy).toHaveBeenCalled();
-			expect(registeredSpy).not.toHaveBeenCalled();
 			expect(sipManager.isConnected()).toBe(true);
-			expect(sipManager.isRegistered()).toBe(false);
 		});
 	});
 
@@ -159,7 +153,6 @@ describe('SipManager', () => {
 			expect(mockUA.stop).toHaveBeenCalled();
 			expect(sipManager.getUserAgent()).toBeNull();
 			expect(sipManager.isConnected()).toBe(false);
-			expect(sipManager.isRegistered()).toBe(false);
 		});
 
 		it('ignores events from a UA it already stopped', () => {
@@ -169,7 +162,6 @@ describe('SipManager', () => {
 			sipManager.initialize(mockClientConfig, mockSettings);
 			const newUA = sipManager.getUserAgent() as unknown as MockUA;
 			newUA.emit('connected');
-			newUA.emit('registered');
 			const disconnected = vi.fn();
 			sipManager.on(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, disconnected);
 
@@ -178,7 +170,6 @@ describe('SipManager', () => {
 
 			expect(disconnected).not.toHaveBeenCalled();
 			expect(sipManager.isConnected()).toBe(true);
-			expect(sipManager.isRegistered()).toBe(true);
 		});
 
 		it('still forwards a stopped UA\'s disconnected while no newer UA exists', () => {
@@ -191,26 +182,23 @@ describe('SipManager', () => {
 			const stateBefore = sipManager.getState();
 
 			oldUA.emit('disconnected', { code: 1000, reason: 'Normal' });
-			oldUA.emit('registered');
 
 			expect(disconnected).toHaveBeenCalledWith({ code: 1000, reason: 'Normal' });
 			expect(sipManager.getState()).toEqual(stateBefore);
 		});
 
-		it('drops a stopped UA\'s session and registration events even with no newer UA', () => {
+		it('drops a stopped UA\'s session events even with no newer UA', () => {
 			sipManager.initialize(mockClientConfig, mockSettings);
 			const oldUA = sipManager.getUserAgent() as unknown as MockUA;
 			sipManager.stop();
 			const spy = vi.fn();
-			for (const event of ['connecting', 'connected', 'registered', 'newRTCSession', 'registrationFailed', 'error']) {
+			for (const event of ['connecting', 'connected', 'newRTCSession', 'error']) {
 				sipManager.on(event, () => spy(event));
 			}
 
 			oldUA.emit('connecting');
 			oldUA.emit('connected');
-			oldUA.emit('registered');
 			oldUA.emit('newRTCSession', { session: { data: {} } });
-			oldUA.emit('registrationFailed', { cause: 'Connection Error' });
 
 			expect(spy).not.toHaveBeenCalled();
 		});
@@ -224,7 +212,6 @@ describe('SipManager', () => {
 		beforeEach(() => {
 			sipManager.initialize(mockClientConfig, mockSettings);
 			mockUA = sipManager.getUserAgent() as unknown as MockUA;
-			// Simulate registered state
 			sipManager.start();
 		});
 
@@ -263,9 +250,7 @@ describe('SipManager', () => {
 			expect(() => sipManager.call('123')).toThrow('SIP manager not initialized');
 		});
 
-		it('should place the call without being registered', () => {
-			expect(sipManager.isRegistered()).toBe(false);
-
+		it('should place the call without registering', () => {
 			expect(() => sipManager.call('123')).not.toThrow();
 			expect(mockUA.call).toHaveBeenCalled();
 		});
@@ -293,7 +278,7 @@ describe('SipManager', () => {
 			sipManager.destroy();
 		});
 
-		const startAndRegister = async () => {
+		const startAndWait = async () => {
 			sipManager.start();
 			await new Promise(resolve => setTimeout(resolve, 20));
 		};
@@ -302,7 +287,7 @@ describe('SipManager', () => {
 			sipManager = new SipManager();
 			sipManager.initialize(mockClientConfig, mockSettings);
 			mockUA = sipManager.getUserAgent() as unknown as MockUA;
-			await startAndRegister();
+			await startAndWait();
 
 			sipManager.call('app-123');
 
@@ -318,7 +303,7 @@ describe('SipManager', () => {
 				mockSettings
 			);
 			mockUA = sipManager.getUserAgent() as unknown as MockUA;
-			await startAndRegister();
+			await startAndWait();
 
 			sipManager.call('endpoint-1');
 
@@ -334,7 +319,7 @@ describe('SipManager', () => {
 				mockSettings
 			);
 			mockUA = sipManager.getUserAgent() as unknown as MockUA;
-			await startAndRegister();
+			await startAndWait();
 
 			sipManager.call('app-123');
 
@@ -368,8 +353,7 @@ describe('SipManager', () => {
 			expect(config).not.toHaveProperty('password');
 			expect(config).not.toHaveProperty('authorization_user');
 
-			await startAndRegister();
-			expect(sipManager.isRegistered()).toBe(false);
+			await startAndWait();
 			expect(() => sipManager.call('endpoint-1')).not.toThrow();
 		});
 
@@ -387,7 +371,7 @@ describe('SipManager', () => {
 			sipManager = new SipManager();
 			sipManager.initialize({ ...mockClientConfig, organisationId: 'org-1' }, mockSettings);
 			mockUA = sipManager.getUserAgent() as unknown as MockUA;
-			await startAndRegister();
+			await startAndWait();
 
 			sipManager.call('app-123');
 
@@ -448,7 +432,6 @@ describe('SipManager', () => {
 			expect(state).toEqual({
 				ua: expect.anything(),
 				connected: false,
-				registered: false,
 				connecting: false,
 			});
 		});
@@ -460,58 +443,11 @@ describe('SipManager', () => {
 
 			const state = sipManager.getState();
 			expect(state.connected).toBe(true);
-			expect(state.registered).toBe(false);
 			expect(state.connecting).toBe(false);
 		});
 	});
 
 	describe('error handling', () => {
-		it('should emit error on registration failure', () => {
-			sipManager.initialize(mockClientConfig, mockSettings);
-			mockUA = sipManager.getUserAgent() as unknown as MockUA;
-
-			const errorSpy = vi.fn();
-			sipManager.on(COGNIGY_WEBRTC_EVENTS.ERROR, errorSpy);
-
-			mockUA.emit('registrationFailed', { cause: 'Authentication failed' });
-
-			expect(errorSpy).toHaveBeenCalledWith(
-				expect.objectContaining({
-					message: 'Registration failed: Authentication failed',
-				})
-			);
-		});
-
-		it('emits registrationFailed with only cause and response status', () => {
-			sipManager.initialize(mockClientConfig, mockSettings);
-			mockUA = sipManager.getUserAgent() as unknown as MockUA;
-			const spy = vi.fn();
-			sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, spy);
-			sipManager.on(COGNIGY_WEBRTC_EVENTS.ERROR, () => {});
-
-			mockUA.emit('registrationFailed', {
-				cause: 'Rejected',
-				response: { status_code: 403, reason_phrase: 'Forbidden', headers: {}, data: 'raw' },
-			});
-
-			expect(spy).toHaveBeenCalledWith({
-				cause: 'Rejected',
-				response: { status_code: 403, reason_phrase: 'Forbidden' },
-			});
-		});
-
-		it('emits registrationFailed without response when JsSIP gives none', () => {
-			sipManager.initialize(mockClientConfig, mockSettings);
-			mockUA = sipManager.getUserAgent() as unknown as MockUA;
-			const spy = vi.fn();
-			sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, spy);
-			sipManager.on(COGNIGY_WEBRTC_EVENTS.ERROR, () => {});
-
-			mockUA.emit('registrationFailed', { cause: 'Connection Error' });
-
-			expect(spy).toHaveBeenCalledWith({ cause: 'Connection Error' });
-		});
-
 		it('emits disconnected with only code and reason', () => {
 			sipManager.initialize(mockClientConfig, mockSettings);
 			mockUA = sipManager.getUserAgent() as unknown as MockUA;

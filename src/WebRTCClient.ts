@@ -220,18 +220,6 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 			this.emit(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, info);
 		});
 
-		this.sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTERED, () => {
-			this.emit(COGNIGY_WEBRTC_EVENTS.REGISTERED);
-		});
-
-		this.sipManager.on(COGNIGY_WEBRTC_EVENTS.UNREGISTERED, () => {
-			this.emit(COGNIGY_WEBRTC_EVENTS.UNREGISTERED);
-		});
-
-		this.sipManager.on(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, (info) => {
-			this.emit(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, info);
-		});
-
 		this.sipManager.on('newRTCSession', (rtcSession) => {
 			if (this.isDestroyed) return;
 			this.sessionManager.createSession(rtcSession);
@@ -348,7 +336,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	 * to `connecting` and arms the setup timer (if `callSetupTimeoutMs` is set).
 	 * While a call is in progress it returns the in-flight promise.
 	 *
-	 * Rejects (`Failed to connect: …`) on config, registration or connection
+	 * Rejects (`Failed to connect: …`) on config or connection
 	 * failure (state `failed`), when the setup timeout fires (`SETUP_TIMEOUT`),
 	 * and when the attempt is cancelled by endCall() or disconnect() (state
 	 * `ended`, cause `Canceled`).
@@ -489,8 +477,8 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	/**
 	 * Start a call. No-op while a session is live. On a connected client after
 	 * an earlier call (no new connect()), resets the state and arms the setup
-	 * timer like connect() does. Does not re-check registration: connect()
-	 * already waited for it, and JsSIP dials and reconnects the transport itself.
+	 * timer like connect() does. Does not re-check the connection:
+	 * JsSIP dials and reconnects the transport itself.
 	 */
 	async startCall(): Promise<void> {
 		if (!this.isInitialized) {
@@ -680,13 +668,11 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	 */
 	getStatus(): {
 		connected: boolean;
-		registered: boolean;
 		activeSession: CallSession | null;
 		audioState: any;
 	} {
 		return {
 			connected: this.sipManager.isConnected(),
-			registered: this.sipManager.isRegistered(),
 			activeSession: this.getCurrentSession(),
 			audioState: this.audioManager.getState(),
 		};

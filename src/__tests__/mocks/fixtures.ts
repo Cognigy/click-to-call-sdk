@@ -64,7 +64,6 @@ export const mockEventSequences = {
 	successfulCall: [
 		{ event: 'connecting', delay: 10 },
 		{ event: 'connected', delay: 20 },
-		{ event: 'registered', delay: 30 },
 		{ event: 'ringing', delay: 100 },
 		{ event: 'answered', delay: 200 },
 		{ event: 'ended', delay: 5000 },
@@ -72,7 +71,6 @@ export const mockEventSequences = {
 	failedCall: [
 		{ event: 'connecting', delay: 10 },
 		{ event: 'connected', delay: 20 },
-		{ event: 'registered', delay: 30 },
 		{ event: 'ringing', delay: 100 },
 		{ event: 'failed', delay: 200 },
 	],

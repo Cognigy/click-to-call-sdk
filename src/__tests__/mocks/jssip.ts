@@ -136,7 +136,6 @@ export class MockUA extends EventEmitter {
 	private _sessions: MockRTCSession[] = [];
 	private _isStarted = false;
 	private _isConnected = false;
-	private _isRegistered = false;
 
 	constructor(public config: any) {
 		super();
@@ -161,21 +160,12 @@ export class MockUA extends EventEmitter {
 			this._isConnected = true;
 			this.emit('connected');
 		}, 10);
-
-		// Finally emit registered (this is what the WebRTCClient waits for)
-		if (this.config?.register === false) return;
-		setTimeout(() => {
-			console.log('MockUA: Emitting registered');
-			this._isRegistered = true;
-			this.emit('registered');
-		}, 15);
 	});
 
 	stop = vi.fn(() => {
 		console.log('MockUA: Stopping...');
 		this._isStarted = false;
 		this._isConnected = false;
-		this._isRegistered = false;
 		setTimeout(() => this.emit('disconnected'), 50);
 	});
 
@@ -192,9 +182,6 @@ export class MockUA extends EventEmitter {
 		return session;
 	});
 
-	register = vi.fn();
-	unregister = vi.fn();
-	isRegistered = vi.fn(() => this._isRegistered);
 	isConnected = vi.fn(() => this._isConnected);
 
 	// Test utilities
@@ -212,12 +199,6 @@ export class MockUA extends EventEmitter {
 		this.emit('newRTCSession', { session });
 		return session;
 	}
-
-	simulateConnectionFailure() {
-		setTimeout(() => {
-			this.emit('registrationFailed', { cause: 'Connection failed' });
-		}, 20);
-	}
 }
 
 // Create a spyable constructor using vi.fn with MockUA implementation
@@ -228,7 +209,6 @@ export const MockUASpy = vi.fn(function MockUASpyImpl(this: any, config: any) {
 	this._sessions = [];
 	this._isStarted = false;
 	this._isConnected = false;
-	this._isRegistered = false;
 	
 	this.start = vi.fn(() => {
 		if (this._isStarted) return;
@@ -243,19 +223,12 @@ export const MockUASpy = vi.fn(function MockUASpyImpl(this: any, config: any) {
 			this._isConnected = true;
 			this.emit('connected');
 		}, 10);
-		if (this.config?.register === false) return;
-		setTimeout(() => {
-			console.log('MockUA: Emitting registered');
-			this._isRegistered = true;
-			this.emit('registered');
-		}, 15);
 	});
 	
 	this.stop = vi.fn(() => {
 		console.log('MockUA: Stopping...');
 		this._isStarted = false;
 		this._isConnected = false;
-		this._isRegistered = false;
 		setTimeout(() => this.emit('disconnected'), 50);
 	});
 	
@@ -270,9 +243,6 @@ export const MockUASpy = vi.fn(function MockUASpyImpl(this: any, config: any) {
 		return session;
 	});
 	
-	this.register = vi.fn();
-	this.unregister = vi.fn();
-	this.isRegistered = vi.fn(() => this._isRegistered);
 	this.isConnected = vi.fn(() => this._isConnected);
 	
 	this.getSessions = () => this._sessions;
@@ -282,11 +252,6 @@ export const MockUASpy = vi.fn(function MockUASpyImpl(this: any, config: any) {
 		this._sessions.push(session);
 		this.emit('newRTCSession', { session });
 		return session;
-	};
-	this.simulateConnectionFailure = () => {
-		setTimeout(() => {
-			this.emit('registrationFailed', { cause: 'Connection failed' });
-		}, 20);
 	};
 	
 	return this;

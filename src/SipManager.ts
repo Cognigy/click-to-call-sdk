@@ -13,7 +13,7 @@ import type {
 	SipManagerState
 } from './types/internal.js';
 import { randomId } from './utils/helpers.js';
-import type { DisconnectedInfo, RegistrationFailedInfo } from './types/index.js';
+import type { DisconnectedInfo } from './types/index.js';
 
 export class SipManager extends SDKEventEmitter {
 	private ua: IUA | null = null;
@@ -22,7 +22,6 @@ export class SipManager extends SDKEventEmitter {
 	private state: SipManagerState = {
 		ua: null,
 		connected: false,
-		registered: false,
 		connecting: false,
 	};
 
@@ -120,25 +119,11 @@ export class SipManager extends SDKEventEmitter {
 			console.log('SIP disconnected:', data);
 			if (current) {
 				this.state.connected = false;
-				this.state.registered = false;
 				this.state.connecting = false;
 			}
 			// Forward only code and reason, not the JsSIP socket
 			const info: DisconnectedInfo = { code: data?.code, reason: data?.reason };
 			this.emit(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, info);
-		});
-
-		// Registration events
-		on('registered', (data: any) => {
-			console.log('SIP registered:', data);
-			this.state.registered = true;
-			this.emit(COGNIGY_WEBRTC_EVENTS.REGISTERED, data);
-		});
-
-		onTeardown('unregistered', (data: any, current) => {
-			console.log('SIP unregistered:', data);
-			if (current) this.state.registered = false;
-			this.emit(COGNIGY_WEBRTC_EVENTS.UNREGISTERED, data);
 		});
 
 		// New RTC session events
@@ -147,21 +132,6 @@ export class SipManager extends SDKEventEmitter {
 
 			this.handleNewSession(rtcSession);
 			this.emit('newRTCSession', rtcSession);
-		});
-
-		// Registration failure
-		on('registrationFailed', (data: any) => {
-			console.error('SIP registration failed:', data);
-			// Map instead of forwarding the JsSIP response, which carries the whole message
-			const info: RegistrationFailedInfo = { cause: data.cause };
-			if (data.response) {
-				info.response = {
-					status_code: data.response.status_code,
-					reason_phrase: data.response.reason_phrase,
-				};
-			}
-			this.emit(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, info);
-			this.emit(COGNIGY_WEBRTC_EVENTS.ERROR, new Error(`Registration failed: ${data.cause}`));
 		});
 	}
 
@@ -219,7 +189,6 @@ export class SipManager extends SDKEventEmitter {
 			this.state = {
 				ua: null,
 				connected: false,
-				registered: false,
 				connecting: false,
 			};
 			ua.stop();
@@ -266,13 +235,6 @@ export class SipManager extends SDKEventEmitter {
 	 */
 	isConnected(): boolean {
 		return this.state.connected;
-	}
-
-	/**
-	 * Check if registered
-	 */
-	isRegistered(): boolean {
-		return this.state.registered;
 	}
 
 	/**
