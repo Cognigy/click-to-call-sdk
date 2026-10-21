@@ -56,7 +56,7 @@ describe('WebRTCClient Integration Tests', () => {
 			expect(client.isConnected()).toBe(true);
 			expect(events).toContain('connecting');
 			expect(events).toContain('connected');
-			expect(events).toContain('registered');
+			expect(events).not.toContain('registered');
 		});
 
 		it('should handle connection failure gracefully', async () => {
@@ -460,7 +460,7 @@ describe('WebRTCClient Integration Tests', () => {
 			}));
 		});
 
-		it('should keep registering and dial app-<applicationSid> for a legacy endpoint that also carries the declared ids', async () => {
+		it('should not register and dial app-<applicationSid> for a legacy endpoint that also carries the declared ids', async () => {
 			await client.destroy();
 			const legacyConfigWithIds = {
 				...mockEndpointConfig,
@@ -475,7 +475,7 @@ describe('WebRTCClient Integration Tests', () => {
 			await client.connect();
 			mockUA = (client as any).sipManager.getUserAgent();
 			expect(mockUA.config).toMatchObject({
-				register: true,
+				register: false,
 				uri: 'sip:test-user-123@sip.example.com',
 				authorization_user: 'widget-test-user',
 			});
@@ -736,7 +736,7 @@ describe('WebRTCClient Integration Tests', () => {
 
 			expect(initialStatus).toEqual({
 				connected: true,
-				registered: true,
+				registered: false,
 				activeSession: null,
 				audioState: expect.any(Object),
 			});
@@ -755,7 +755,7 @@ describe('WebRTCClient Integration Tests', () => {
 
 			expect(callStatus.activeSession).toBeTruthy();
 			expect(callStatus.connected).toBe(true);
-			expect(callStatus.registered).toBe(true);
+			expect(callStatus.registered).toBe(false);
 		});
 	});
 

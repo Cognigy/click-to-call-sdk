@@ -11,7 +11,7 @@ import type { MockUA as MockUAType } from '../mocks/jssip.js';
 
 const ua = vi.hoisted(() => ({
 	instances: [] as any[],
-	failRegistration: false,
+	hangConnect: false,
 	silentCall: false,
 }));
 
@@ -22,18 +22,9 @@ vi.mock('jssip', async () => {
 		constructor(config: any) {
 			super(config);
 			ua.instances.push(this);
-			if (ua.failRegistration) {
+			if (ua.hangConnect) {
 				this.start = v.fn(() => {
 					setTimeout(() => this.emit('connecting'), 5);
-					setTimeout(() => this.emit('connected'), 10);
-					setTimeout(
-						() =>
-							this.emit('registrationFailed', {
-								cause: 'Authentication Error',
-								response: { status_code: 401, reason_phrase: 'Unauthorized' },
-							}),
-						15
-					);
 				});
 			}
 			if (ua.silentCall) {
@@ -77,7 +68,7 @@ describe('WebRTCClient call lifecycle', () => {
 		vi.useFakeTimers({ shouldAdvanceTime: true });
 		vi.clearAllMocks();
 		ua.instances.length = 0;
-		ua.failRegistration = false;
+		ua.hangConnect = false;
 		ua.silentCall = false;
 		global.fetch = vi.fn().mockResolvedValue(mockFetchResponses.success);
 	});
@@ -621,55 +612,40 @@ describe('WebRTCClient call lifecycle', () => {
 			expect(ua.instances).toHaveLength(0);
 		});
 
-		it('registration failure fails with REGISTRATION_FAILED', async () => {
-			ua.failRegistration = true;
-			create();
-			const registrationFailed = vi.fn();
-			client.on('registrationFailed', registrationFailed);
+		it('a connect that never completes times out with Connection Error without a setup timer', async () => {
+			ua.hangConnect = true;
+			create({ callSetupTimeoutMs: 0 });
 
 			const p = client.connect();
-			const settled = expect(p).rejects.toThrow(/^Failed to connect: Registration failed/);
-			await vi.advanceTimersByTimeAsync(20);
+			const settled = expect(p).rejects.toThrow(/^Failed to connect/);
+			await vi.advanceTimersByTimeAsync(15_100);
 			await settled;
 
-			expect(registrationFailed).toHaveBeenCalledWith({
-				cause: 'Authentication Error',
-				response: { status_code: 401, reason_phrase: 'Unauthorized' },
-			});
 			expect(client.getState().status).toBe('failed');
-			expect(client.getState().endInfo).toEqual({ originator: null, cause: 'REGISTRATION_FAILED', description: null });
+			expect(client.getState().endInfo?.cause).toBe('Connection Error');
 		});
 
-		it('connect on a legacy endpoint waits for registration', async () => {
+		it('connect resolves on the WebSocket connecting without a REGISTER', async () => {
 			create();
-			let settled = false;
-			const p = client.connect().then(() => {
-				settled = true;
-			});
+			await connect();
 
-			// MockUA: connected at 10 ms, registered at 15 ms
-			await vi.advanceTimersByTimeAsync(12);
+			expect(client.isConnected()).toBe(true);
+			expect(lastUA().config.register).toBe(false);
 			expect(lastUA().isRegistered()).toBe(false);
-			expect(settled).toBe(false);
-
-			await vi.advanceTimersByTimeAsync(10);
-			await p;
-			expect(settled).toBe(true);
-			expect(lastUA().isRegistered()).toBe(true);
 		});
 
 		it('stops the UA after a failed connect so setUserId and reconnect work', async () => {
-			ua.failRegistration = true;
+			ua.hangConnect = true;
 			create();
 			const p = client.connect();
 			const settled = expect(p).rejects.toThrow(/Failed to connect/);
-			await vi.advanceTimersByTimeAsync(20);
+			await vi.advanceTimersByTimeAsync(15_100);
 			await settled;
 
 			expect(lastUA().stop).toHaveBeenCalled();
 			expect(() => client.setUserId('webrtc-retry')).not.toThrow();
 
-			ua.failRegistration = false;
+			ua.hangConnect = false;
 			await connect();
 			expect(client.isConnected()).toBe(true);
 			expect(lastUA().config.uri).toBe('sip:webrtc-retry@sip.example.com');
@@ -681,7 +657,7 @@ describe('WebRTCClient call lifecycle', () => {
 			const settled = expect(p).rejects.toThrow(/^Failed to connect: Canceled/);
 			while (ua.instances.length === 0) await vi.advanceTimersByTimeAsync(0);
 			// Runs after SipManager's handler resolved the wait, before connect's continuation
-			lastUA().on('registered', () => {
+			lastUA().on('connected', () => {
 				queueMicrotask(() => queueMicrotask(() => void client.endCall()));
 			});
 

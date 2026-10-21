@@ -1,3 +1,10 @@
+## [0.2.2](https://github.com/Cognigy/click-to-call-sdk/compare/v0.2.1...v0.2.2) (2026-10-06)
+
+
+### Bug Fixes
+
+* **sip:** never REGISTER, authenticate legacy endpoints on the INVITE (CGY-41743) ([#16](https://github.com/Cognigy/click-to-call-sdk/issues/16)) ([c83fbb8](https://github.com/Cognigy/click-to-call-sdk/commit/c83fbb832f130d84d07180d8e30d160a6ea818d5))
+
 ## [0.2.1](https://github.com/Cognigy/click-to-call-sdk/compare/v0.2.0...v0.2.1) (2026-10-05)
 
 

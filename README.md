@@ -77,7 +77,7 @@ interface WebRTCClientConfig {
 | `loadConfig()`          | Fetch the endpoint config once and cache it (concurrent calls share one request); resolves `EndpointConfig`. Does not validate SIP fields, so a widget can render configs `connect()` rejects |
 | `getConfig()`           | Cached `EndpointConfig` or `null` (before `loadConfig()`/`connect()`) |
 | `setUserId(id)`         | Override the SIP user id. Throws once the SIP UA exists (`connect()` started, until `disconnect()`) |
-| `connect()`             | Connect to SIP server and register; starts a new call attempt (state `connecting`). Rejects on config, registration or connection failure, on setup timeout, and when cancelled via `endCall()` / `disconnect()` |
+| `connect()`             | Connect to the SIP server (no REGISTER); starts a new call attempt (state `connecting`). Rejects on config or connection failure, on setup timeout, and when cancelled via `endCall()` / `disconnect()` |
 | `disconnect()`          | Disconnect from SIP server; cancels a pending `connect()` |
 | `connectAndCall()`      | Connect + start call in one step; rejects like `connect()`, also with `Failed to connect: <cause>` when cancelled or timed out after connecting but before dialing |
 | `startCall()`           | Start a call (must be connected first)       |
@@ -120,8 +120,10 @@ interface WebRTCClientConfig {
 | `stateChanged`  | `(state: ClientState)`                                                  |
 | `error`         | `(error: Error)`                                                        |
 
-> **Note:** `error` is only emitted while a listener is registered. Connection and setup failures (config,
-> registration, transport) also land in `getState().endInfo` and reject `connect()`; other errors, such as
+> **Note:** the SDK never sends REGISTER, so `registered`, `unregistered` and `registrationFailed` are not emitted.
+>
+> `error` is only emitted while a listener is registered. Connection and setup failures (config,
+> transport) also land in `getState().endInfo` and reject `connect()`; other errors, such as
 > audio playback failures, are only reported through `error`.
 
 ## Call state

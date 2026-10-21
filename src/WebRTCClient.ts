@@ -424,33 +424,13 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 				withTimeout(
 					new Promise<void>((resolve, reject) => {
 						const sip = this.sipManager;
-						let connected = false;
-						let registered = !sip.needsRegistration();
-						const settle = () => {
-							if (connected && registered) resolve();
-						};
-						const onConnected = () => {
-							connected = true;
-							settle();
-						};
-						const onRegistered = () => {
-							registered = true;
-							settle();
-						};
-						// Emitted just before the matching 'error'
-						const onRegistrationFailed = () => {
-							cause = SDK_END_CAUSES.REGISTRATION_FAILED;
-						};
+						const onConnected = () => resolve();
 						const onError = (error: Error) => reject(error);
 
 						sip.on(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
-						sip.on(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
-						sip.on(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, onRegistrationFailed);
 						sip.on(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
 						removeListeners = () => {
 							sip.off(COGNIGY_WEBRTC_EVENTS.CONNECTED, onConnected);
-							sip.off(COGNIGY_WEBRTC_EVENTS.REGISTERED, onRegistered);
-							sip.off(COGNIGY_WEBRTC_EVENTS.REGISTRATION_FAILED, onRegistrationFailed);
 							sip.off(COGNIGY_WEBRTC_EVENTS.ERROR, onError);
 						};
 
@@ -631,11 +611,7 @@ export class WebRTCClient extends SDKEventEmitter implements IWebRTCClient {
 	 * Check if connected to SIP server
 	 */
 	isConnected(): boolean {
-		return (
-			this.isInitialized &&
-			this.sipManager.isConnected() &&
-			(this.sipManager.isRegistered() || !this.sipManager.needsRegistration())
-		);
+		return this.isInitialized && this.sipManager.isConnected();
 	}
 
 	/**

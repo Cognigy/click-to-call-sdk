@@ -68,8 +68,8 @@ The **orchestrator**. It owns the managers and the `CallStateStore` and wires th
 1. `ConfigManager.fetchConfig()` — fetches endpoint settings from the server (cached; shared with `loadConfig()`).
 2. `ConfigManager.getSipCredentials()` — extracts SIP credentials + derives `fullUsername`.
 3. `SipManager.initialize(credentials, settings)` — creates the JsSIP User Agent.
-4. `SipManager.start()` — opens the WebSocket and registers with the SIP server.
-5. Waits for `connected` and, when the endpoint needs registration, `registered` (with 15s timeout).
+4. `SipManager.start()` — opens the WebSocket to the SIP server. The UA never sends REGISTER; legacy calls are digest-challenged on the INVITE.
+5. Waits for the `connected` event (with 15s timeout).
 
 Failures reject with `Failed to connect: …` and set the state to `failed` with an `SDK_END_CAUSES` cause (or `Connection Error`). `endCall()` / `disconnect()` before a session exists abort the pending `connect()` and end the state with cause `Canceled`.
 
@@ -88,7 +88,7 @@ idle → connecting → ringing → answered → ended / failed
           │            └─→ ended / failed (session events, Connection Error)
           │
           └─→ before a session exists:
-              ended (Canceled) / failed (SETUP_TIMEOUT, config, registration, Connection Error)
+              ended (Canceled) / failed (SETUP_TIMEOUT, config, Connection Error)
 ```
 
 - `connecting`: from `connect()` (or `startCall()` on a client that already completed a call) until ringing.
@@ -110,7 +110,7 @@ Fetches and caches the endpoint configuration from the server.
 - HTTP fetch with 10s timeout to retrieve `EndpointConfig`.
 - Validates the response against required fields (org ID, project ID, SIP credentials).
 - Derives `userId` from `endpointName` when none is provided (sanitizes to `[a-zA-Z0-9-]`, lowercases, appends random suffix).
-- Builds the `fullUsername` for SIP registration: `{userId}@{realm}`.
+- Builds the `fullUsername` for the SIP URI and digest credentials: `{userId}@{realm}`.
 - Provides accessors for SIP credentials, application SID, widget active state, and privacy settings.
 
 ### SipManager (`src/SipManager.ts`)
