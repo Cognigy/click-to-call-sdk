@@ -12,7 +12,6 @@ export type ExtendedRTCSession = Omit<RTCSession, 'sendInfo'> & {
 	sendInfo: (text: string, data: Record<string, any>) => void;
 	data: {
 		originalNumber?: string;
-		replaces?: boolean;
 		[key: string]: any;
 	};
 };
@@ -68,7 +67,6 @@ export interface AudioState {
 export interface SipManagerState {
 	ua: UA | null;
 	connected: boolean;
-	registered: boolean;
 	connecting: boolean;
 }
 

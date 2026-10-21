@@ -35,33 +35,42 @@ function serveDistPlugin(): Plugin {
 export default defineConfig(({ mode }) => {
 	const isProd = mode === 'production';
 	const isDev = mode === 'development';
+	// ES/CJS keep jssip and events external; the UMD build (script tag) bundles them.
+	// Dev keeps the single all-in-one build so index.html can import the ES bundle.
+	const isUmd = !isDev && process.env.SDK_FORMAT === 'umd';
+	const isExternal = !isDev && !isUmd;
 
 	return {
 		plugins: [
-			dts({
+			...(!isUmd ? [dts({
 				insertTypesEntry: true,
 				include: ['src/**/*'],
 				exclude: ['src/**/*.test.ts', 'src/**/*.spec.ts', 'src/__tests__/**/*'],
-			}),
+			})] : []),
 			...(isDev ? [serveDistPlugin()] : []),
 			...(isProd ? [
 				compression({ algorithm: "gzip" }),
 				compression({ algorithm: "brotliCompress", ext: ".br" }),
-				analyzer(),
+				// Only in the first build; the UMD pass would overwrite its report.
+				// Static: the default server mode blocks the build outside CI. Kept out of dist/ so it isn't published.
+				...(!isUmd ? [analyzer({ analyzerMode: 'static', openAnalyzer: false, fileName: resolve(__dirname, 'reports/bundle-stats.html') })] : []),
 			] : []),
 		],
 		build: {
 			lib: {
 				entry: resolve(__dirname, 'src/index.ts'),
 				name: 'WebRTCSDK',
-				formats: ['umd', 'cjs', 'es'],
+				formats: isDev ? ['umd', 'cjs', 'es'] : isUmd ? ['umd'] : ['es', 'cjs'],
 				fileName: (format) => {
 					if (format === 'es') return 'webRTCSDK.es.js';
 					if (format === 'cjs') return 'webRTCSDK.cjs.js';
 					return 'webRTCSDK.js';
 				},
 			},
+			// The UMD pass must not wipe the ES/CJS output
+			emptyOutDir: isUmd ? false : undefined,
 			rollupOptions: {
+				external: isExternal ? [/^jssip(\/.*)?$/, 'events'] : [],
 				output: {
 					exports: 'named',
 				},

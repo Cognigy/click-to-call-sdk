@@ -5,7 +5,6 @@
 
 import { WebSocketInterface, UA } from 'jssip';
 import type { UA as IUA } from 'jssip';
-import type { UAEventMap } from 'jssip/lib/UA';
 import { SDKEventEmitter, COGNIGY_WEBRTC_EVENTS } from './utils/events.js';
 import type {
 	InternalClientConfig,
@@ -14,6 +13,7 @@ import type {
 	SipManagerState
 } from './types/internal.js';
 import { randomId } from './utils/helpers.js';
+import type { DisconnectedInfo } from './types/index.js';
 
 export class SipManager extends SDKEventEmitter {
 	private ua: IUA | null = null;
@@ -22,7 +22,6 @@ export class SipManager extends SDKEventEmitter {
 	private state: SipManagerState = {
 		ua: null,
 		connected: false,
-		registered: false,
 		connecting: false,
 	};
 
@@ -44,7 +43,14 @@ export class SipManager extends SDKEventEmitter {
 					]
 				: [];
 
-		console.log('Creating SIP client with config:', { client, settings }, settings.pcConfig);
+		console.log('Creating SIP client with config:', { client: { ...client, password: client.password ? '***' : undefined }, settings });
+
+		// SC-8: SIP credentials travel over this socket, so never allow cleartext
+		// (CTCW-SC8-001). new URL() lowercases the scheme.
+		const { protocol } = new URL(settings.wsUri);
+		if (protocol !== 'wss:') {
+			throw new Error(`SipManager requires a wss:// URI, got ${protocol}`);
+		}
 
 		const socket = new WebSocketInterface(settings.wsUri);
 
@@ -79,55 +85,53 @@ export class SipManager extends SDKEventEmitter {
 	 * Set up event handlers for the UA
 	 */
 	private setupEventHandlers(): void {
-		if (!this.ua) return;
-
-		// Connection events
-		(['connecting', 'connected', 'disconnected'] as const).forEach((eventName) => {
-			this.ua?.on(eventName as keyof UAEventMap, (data: any) => {
-				console.log(`SIP ${eventName}:`, data);
-
-				// Update state
-				if (eventName === 'connected') {
-					this.state.connected = true;
-					this.state.connecting = false;
-				} else if (eventName === 'disconnected') {
-					this.state.connected = false;
-					this.state.registered = false;
-					this.state.connecting = false;
-				} else if (eventName === 'connecting') {
-					this.state.connecting = true;
-				}
-
-				// Emit SDK event
-				this.emit(COGNIGY_WEBRTC_EVENTS[eventName.toUpperCase() as keyof typeof COGNIGY_WEBRTC_EVENTS], data);
+		const ua = this.ua;
+		if (!ua) return;
+		// A stopped UA keeps emitting (e.g. disconnected once its socket closes).
+		// Only its teardown events are forwarded, and only until a newer UA
+		// exists; they never touch state, which belongs to the current UA.
+		const on = (event: string, handler: (data: any) => void) => {
+			ua.on(event as any, (data: any) => {
+				if (this.ua === ua) handler(data);
 			});
+		};
+		const onTeardown = (event: string, handler: (data: any, current: boolean) => void) => {
+			ua.on(event as any, (data: any) => {
+				const current = this.ua === ua;
+				if (current || this.ua === null) handler(data, current);
+			});
+		};
+
+		on('connecting', () => {
+			console.log('SIP connecting');
+			this.state.connecting = true;
+			this.emit(COGNIGY_WEBRTC_EVENTS.CONNECTING);
 		});
 
-		// Registration events
-		this.ua.on('registered', (data: any) => {
-			console.log('SIP registered:', data);
-			this.state.registered = true;
-			this.emit(COGNIGY_WEBRTC_EVENTS.REGISTERED, data);
+		on('connected', (data: any) => {
+			console.log('SIP connected:', data);
+			this.state.connected = true;
+			this.state.connecting = false;
+			this.emit(COGNIGY_WEBRTC_EVENTS.CONNECTED, data);
 		});
 
-		this.ua.on('unregistered', (data: any) => {
-			console.log('SIP unregistered:', data);
-			this.state.registered = false;
-			this.emit(COGNIGY_WEBRTC_EVENTS.UNREGISTERED, data);
+		onTeardown('disconnected', (data: any, current) => {
+			console.log('SIP disconnected:', data);
+			if (current) {
+				this.state.connected = false;
+				this.state.connecting = false;
+			}
+			// Forward only code and reason, not the JsSIP socket
+			const info: DisconnectedInfo = { code: data?.code, reason: data?.reason };
+			this.emit(COGNIGY_WEBRTC_EVENTS.DISCONNECTED, info);
 		});
 
 		// New RTC session events
-		this.ua.on('newRTCSession', (data: any) => {
+		on('newRTCSession', (data: any) => {
 			const rtcSession = data.session as ExtendedRTCSession;
 
 			this.handleNewSession(rtcSession);
 			this.emit('newRTCSession', rtcSession);
-		});
-
-		// Registration failure
-		this.ua.on('registrationFailed', (data: any) => {
-			console.error('SIP registration failed:', data);
-			this.emit(COGNIGY_WEBRTC_EVENTS.ERROR, new Error(`Registration failed: ${data.cause}`));
 		});
 	}
 
@@ -177,16 +181,17 @@ export class SipManager extends SDKEventEmitter {
 	 * Stop the SIP user agent
 	 */
 	stop(): void {
-		if (this.ua) {
+		const ua = this.ua;
+		if (ua) {
 			console.log('Stopping SIP user agent');
-			this.ua.stop();
+			// Detach first so events emitted while stopping are ignored
 			this.ua = null;
 			this.state = {
 				ua: null,
 				connected: false,
-				registered: false,
 				connecting: false,
 			};
+			ua.stop();
 		}
 	}
 
@@ -230,13 +235,6 @@ export class SipManager extends SDKEventEmitter {
 	 */
 	isConnected(): boolean {
 		return this.state.connected;
-	}
-
-	/**
-	 * Check if registered
-	 */
-	isRegistered(): boolean {
-		return this.state.registered;
 	}
 
 	/**

@@ -16,12 +16,10 @@ import { randomId } from './utils/helpers.js';
 
 export class SessionManager extends SDKEventEmitter {
 	private sessions: Map<string, SessionState> = new Map();
+	/** Sessions whose last streamsChanged carried at least one stream. */
+	private sessionsWithStreams = new Set<string>();
 	private activeSessionId: string | null = null;
 	private audioManager?: any;
-
-	constructor(_pcConfig?: RTCConfiguration) {
-		super();
-	}
 
 	/**
 	 * Set the audio manager for direct audio handling
@@ -34,7 +32,17 @@ export class SessionManager extends SDKEventEmitter {
 	 * Create a new session from an RTC session
 	 */
 	createSession(rtcSession: ExtendedRTCSession): string {
+		// The same RTCSession can be announced more than once
+		for (const existing of this.sessions.values()) {
+			if (existing.rtcSession === rtcSession) {
+				return existing.id;
+			}
+		}
+
 		const sessionId = rtcSession.data?.sessionId || randomId('session');
+		if (rtcSession.data) {
+			rtcSession.data.sessionId = sessionId;
+		}
 
 		const sessionState: SessionState = {
 			id: sessionId,
@@ -86,6 +94,9 @@ export class SessionManager extends SDKEventEmitter {
 			this.setActiveSession(sessionState.id);
 			this.updateSession(sessionState);
 			this.emit(COGNIGY_WEBRTC_EVENTS.ANSWERED, this.getPublicSession(sessionState));
+			if (rtcSession._connection) {
+				this.emitStreams(sessionState, rtcSession._connection);
+			}
 		});
 
 		// Failed event
@@ -139,20 +150,57 @@ export class SessionManager extends SDKEventEmitter {
 
 
 		// info messages
-		rtcSession.on('newInfo', this.handleNewInfo.bind(this));
+		rtcSession.on('newInfo', (data: any) => this.handleNewInfo(sessionState.id, data));
+
+		this.setupTransferHandlers(rtcSession);
+		this.setupIceHandler(rtcSession);
 
 		// Peer connection events for audio handling
 		this.setupPeerConnectionHandlers(sessionState);
 	}
 
-	private handleNewInfo(data: any): void {
+	/**
+	 * Reject inbound REFER and Replaces: there is no transfer UI, and accepting
+	 * Replaces would auto-answer with the microphone (CTCW-AC3-001/-002).
+	 */
+	private setupTransferHandlers(rtcSession: ExtendedRTCSession): void {
+		rtcSession.on('refer', (data: any) => data.reject());
+		rtcSession.on('replaces', (data: any) => data.reject());
+	}
+
+	/**
+	 * Finish ICE gathering early once a srflx or relay candidate exists, instead of
+	 * waiting for every candidate (host candidates alone are not routable).
+	 */
+	private setupIceHandler(rtcSession: ExtendedRTCSession): void {
+		let routable = false;
+		let readyCalled = false;
+
+		rtcSession.on('icecandidate', (evt: any) => {
+			const candidate = evt?.candidate?.candidate;
+			if (typeof candidate !== 'string') {
+				return;
+			}
+			const type = candidate.split(' ')[7];
+			if (type === 'srflx' || type === 'relay') {
+				routable = true;
+			}
+			if (routable && !readyCalled) {
+				readyCalled = true;
+				evt.ready();
+			}
+		});
+	}
+
+	private handleNewInfo(sessionId: string, data: any): void {
 		const { originator, info } = data;
 		try {
 			if (originator === 'remote') {
 				const parsedData = JSON.parse(info.body);
-				if (Object.hasOwn(parsedData, '_transcription')) {
+				// biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn needs Safari 15.4 / Chrome 93
+				if (Object.prototype.hasOwnProperty.call(parsedData, '_transcription')) {
 					// Emit transcription event and stop here - don't emit newInfo for transcription events
-					this.emit(COGNIGY_WEBRTC_EVENTS.TRANSCRIPTION, parsedData._transcription);
+					this.emit(COGNIGY_WEBRTC_EVENTS.TRANSCRIPTION, parsedData._transcription, sessionId);
 					return;
 				}
 			}
@@ -169,6 +217,7 @@ export class SessionManager extends SDKEventEmitter {
 		const { rtcSession } = sessionState;
 
 		const attachPCListeners = (pc: RTCPeerConnection) => {
+			pc.addEventListener('negotiationneeded', () => this.emitStreams(sessionState, pc));
 			pc.addEventListener('track', (event: any) => {
 				const track = event.track;
 
@@ -181,6 +230,7 @@ export class SessionManager extends SDKEventEmitter {
 						this.audioManager.handleRemoteStream(stream);
 					}
 				}
+				this.emitStreams(sessionState, pc);
 			});
 		};
 
@@ -192,6 +242,29 @@ export class SessionManager extends SDKEventEmitter {
 				attachPCListeners(pc);
 			});
 		}
+	}
+
+	/**
+	 * Emit the peer connection's current remote/local audio streams and the
+	 * session id (internal event). A null pair is emitted once when the last audio track goes away.
+	 */
+	private emitStreams(sessionState: SessionState, pc: RTCPeerConnection): void {
+		const audioTracks = (items: Array<RTCRtpReceiver | RTCRtpSender>): MediaStreamTrack[] =>
+			items
+				.map((item) => item.track)
+				.filter((track): track is MediaStreamTrack => !!track && track.kind === 'audio');
+
+		const remoteTracks = audioTracks(pc.getReceivers());
+		const localTracks = audioTracks(pc.getSenders());
+		const remote = remoteTracks.length > 0 ? new MediaStream(remoteTracks) : null;
+		const local = localTracks.length > 0 ? new MediaStream(localTracks) : null;
+
+		if (remote || local) {
+			this.sessionsWithStreams.add(sessionState.id);
+		} else if (!this.sessionsWithStreams.delete(sessionState.id)) {
+			return;
+		}
+		this.emit(COGNIGY_WEBRTC_EVENTS.STREAMS_CHANGED, remote, local, sessionState.id);
 	}
 
 	/**
@@ -393,10 +466,10 @@ export class SessionManager extends SDKEventEmitter {
 	}
 
 	/**
-	 * Terminate active session
+	 * Terminate the current session (also works while it is still ringing)
 	 */
 	terminate(sipCode: number = 480, sipReason: string = 'Ended by user'): void {
-		const sessionState = this.getActiveSessionState();
+		const sessionState = this.getCurrentSessionState();
 		if (!sessionState) {
 			throw new Error('No active session to terminate');
 		}
@@ -414,10 +487,36 @@ export class SessionManager extends SDKEventEmitter {
 	}
 
 	/**
+	 * Current session: the active one, else the most recently created that has not ended or failed
+	 */
+	private getCurrentSessionState(): SessionState | null {
+		const active = this.getActiveSessionState();
+		if (active) {
+			return active;
+		}
+		const states = Array.from(this.sessions.values());
+		for (let i = states.length - 1; i >= 0; i--) {
+			const state = states[i];
+			if (state.status !== 'ended' && state.status !== 'failed') {
+				return state;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Advanced/unstable: underlying JsSIP session.
+	 */
+	getRawSession(): ExtendedRTCSession | null {
+		return this.getCurrentSessionState()?.rtcSession ?? null;
+	}
+
+	/**
 	 * Remove session
 	 */
 	private removeSession(sessionId: string): void {
 		this.sessions.delete(sessionId);
+		this.sessionsWithStreams.delete(sessionId);
 		if (this.activeSessionId === sessionId) {
 			this.activeSessionId = null;
 		}
@@ -425,18 +524,27 @@ export class SessionManager extends SDKEventEmitter {
 	}
 
 	/**
-	 * Clean up all sessions
+	 * Terminate every session that has not ended. Keeps listeners, so the
+	 * client's wiring survives disconnect() and serves the next call.
 	 */
-	destroy(): void {
-		// Terminate all active sessions
+	terminateAll(): void {
 		for (const sessionState of this.sessions.values()) {
-			if (sessionState.rtcSession && !sessionState.rtcSession.isEnded()) {
+			const ended = sessionState.status === 'ended' || sessionState.status === 'failed';
+			if (!ended && sessionState.rtcSession && !sessionState.rtcSession.isEnded()) {
 				sessionState.rtcSession.terminate();
 			}
 		}
 
 		this.sessions.clear();
+		this.sessionsWithStreams.clear();
 		this.activeSessionId = null;
+	}
+
+	/**
+	 * Terminate all sessions and remove all listeners
+	 */
+	destroy(): void {
+		this.terminateAll();
 		this.removeAllListeners();
 	}
 }

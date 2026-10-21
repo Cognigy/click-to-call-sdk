@@ -15,6 +15,7 @@ export type {
 	CreateWebRTCClientOptions,
 	CreateWebRTCClient,
 	EndpointConfig,
+	WebrtcWidgetConfig,
 	SipConnectivityInfo,
 	CallSession,
 	CallEndInfo,
@@ -22,8 +23,16 @@ export type {
 	EventName,
 	EventCallback,
 	WebRTCClientEvents,
+	DisconnectedInfo,
 	SendDTMFOptions,
+	CallStatus,
+	TranscriptMessage,
+	ClientState,
+	ExtendedRTCSession,
+	SdkEndCause,
 } from './types/index.js';
+
+export { SDK_END_CAUSES } from './types/index.js';
 
 // Export main client class
 export { WebRTCClient };
