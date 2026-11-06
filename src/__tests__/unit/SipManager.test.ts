@@ -74,7 +74,7 @@ describe('SipManager', () => {
 			});
 
 			const logged = spies.map((s) => JSON.stringify(s.mock.calls)).join('\n');
-			spies.forEach((s) => s.mockRestore());
+			for (const spy of spies) spy.mockRestore();
 			for (const secret of [mockClientConfig.password, 'turn-secret']) {
 				expect(logged).not.toContain(secret);
 			}
