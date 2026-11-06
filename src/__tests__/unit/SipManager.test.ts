@@ -63,6 +63,23 @@ describe('SipManager', () => {
 			});
 		});
 
+		it('should not log SIP or TURN credentials to the console', () => {
+			const spies = (['log', 'info', 'debug', 'warn', 'error'] as const).map((m) =>
+				vi.spyOn(console, m).mockImplementation(() => {}),
+			);
+
+			sipManager.initialize(mockClientConfig, {
+				...mockSettings,
+				pcConfig: { iceServers: [{ urls: 'turn:t.example.com', username: 'turn-user', credential: 'turn-secret' }] },
+			});
+
+			const logged = spies.map((s) => JSON.stringify(s.mock.calls)).join('\n');
+			spies.forEach((s) => s.mockRestore());
+			for (const secret of [mockClientConfig.password, 'turn-secret']) {
+				expect(logged).not.toContain(secret);
+			}
+		});
+
 		it('should stop existing UA before initializing new one', () => {
 			sipManager.initialize(mockClientConfig, mockSettings);
 			const firstUA = sipManager.getUserAgent();
