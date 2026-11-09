@@ -1,3 +1,10 @@
+## [0.2.3](https://github.com/Cognigy/click-to-call-sdk/compare/v0.2.2...v0.2.3) (2026-11-09)
+
+
+### Bug Fixes
+
+* **sip:** stop logging SIP and TURN credentials (CGY-47927) ([#18](https://github.com/Cognigy/click-to-call-sdk/issues/18)) ([e33d76a](https://github.com/Cognigy/click-to-call-sdk/commit/e33d76a735e69b87279e92eca01a9b6700ee5e5a))
+
 ## [0.2.2](https://github.com/Cognigy/click-to-call-sdk/compare/v0.2.1...v0.2.2) (2026-10-06)
 
 
