@@ -495,10 +495,6 @@
                 log('SIP connected');
             });
             
-            client.on('registered', () => {
-                log('SIP registered');
-            });
-            
             client.on('ringing', (session) => {
                 log(`Call ringing: ${session.id}`);
                 currentSession = session;
